@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Na Dukan</title>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="logo">Na <span class="highlight">Dukan</span></div>
+            <div class="nav-links">
+                <button class="nav-btn active" onclick="switchView('dashboard')">Dashboard</button>
+                <button class="nav-btn" onclick="switchView('billing')">Billing</button>
+                <button class="nav-btn" onclick="switchView('sales')">Sales</button>
+                <button class="nav-btn" onclick="switchView('inventory')">Inventory</button>
+            </div>
+        </nav>
+
+        <!-- Configuration Warning (If keys missing) -->
+        <div id="config-warning" class="banner hidden">
+            ⚠️ Please configure Supabase URL and Key in app.js
+        </div>
+
+        <!-- Dashboard View -->
+        <section id="dashboard" class="view active">
+            <header class="view-header">
+                <h1>Dashboard</h1>
+                <div class="filters">
+                    <button class="filter-btn active" data-range="today">Today</button>
+                    <button class="filter-btn" data-range="week">This Week</button>
+                    <button class="filter-btn" data-range="month">This Month</button>
+                    <button class="filter-btn" data-range="year">This Year</button>
+                    <button class="filter-btn" id="custom-date-btn">Custom</button>
+                    <div id="custom-date-inputs" class="hidden">
+                        <input type="date" id="date-from">
+                        <input type="date" id="date-to">
+                        <button class="action-btn small" onclick="applyCustomDate()">Go</button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="dashboard-scroll-container">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Sales</h3>
+                        <p class="stat-value" id="stat-total-sales">₹0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Cash Collected</h3>
+                        <p class="stat-value" id="stat-cash">₹0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>UPI Collected</h3>
+                        <p class="stat-value" id="stat-upi">₹0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Other</h3>
+                        <p class="stat-value" id="stat-other">₹0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Bills</h3>
+                        <p class="stat-value" id="stat-bill-count">0</p>
+                    </div>
+                </div>
+
+                <!-- Data Analysis Section -->
+                <div class="collapsible-header"
+                    onclick="document.getElementById('data-analysis-content').classList.toggle('hidden'); this.querySelector('.toggle-icon').textContent = document.getElementById('data-analysis-content').classList.contains('hidden') ? '▶' : '▼';">
+                    <h2 style="font-size: 1.25rem; margin:0;">Data Analysis</h2>
+                    <span class="toggle-icon">▼</span>
+                </div>
+
+                <div id="data-analysis-content" class="collapsible-content">
+                    <div class="analysis-grid">
+                        <!-- Row 1: Revenue Velocity & Trend -->
+                        <div class="chart-container">
+                            <h3>Revenue Velocity</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-velocity"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Revenue Trend</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-revenue"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Row 2: Bill Velocity & Trend -->
+                        <div class="chart-container">
+                            <h3>Bill Velocity</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-bill-velocity"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Bills Trend</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-bills"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Row 3: Product Sales Trend -->
+                        <div class="chart-container full-width" style="height: 400px;">
+                            <h3>Product Sales Trend</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-product"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Row 4: Payment Mode Distribution -->
+                        <div class="chart-container full-width">
+                            <h3>Payment Mode Distribution</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-payment"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Row 5: Product Sales Table -->
+                        <div class="chart-container full-width" style="height: auto;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <h3>Detailed Sales Report</h3>
+                                <input type="text" id="sales-table-search" placeholder="Search..."
+                                    onkeyup="filterSalesTable()"
+                                    style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 6px;">
+                            </div>
+                            <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                                <table class="data-table" id="sales-report-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Product Name</th>
+                                            <th>Sales Count</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Injected via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-section" style="margin-top: 2rem;">
+                    <h2 style="font-size: 1.1rem; margin-bottom: 1rem;">Top Selling Products</h2>
+                    <div class="top-products-list" id="top-products-list">
+                        <!-- Injected via JS -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Inventory View -->
+        <section id="inventory" class="view hidden">
+            <header class="view-header">
+                <h1>Inventory</h1>
+                <div class="header-actions">
+                    <button class="action-btn" onclick="openAddTabModal()">+ New Tab</button>
+                    <button class="action-btn primary" onclick="openAddProductModal()">+ Add Product</button>
+                </div>
+            </header>
+
+            <div class="tabs-container" id="inventory-tabs">
+                <!-- Product tabs injected here -->
+            </div>
+
+            <div class="inventory-list" id="inventory-list">
+                <!-- Products list injected here -->
+            </div>
+        </section>
+
+        <!-- Billing View -->
+        <section id="billing" class="view hidden">
+            <div class="billing-layout">
+                <div class="billing-products">
+                    <header class="billing-header">
+                        <div class="tabs-scroll" id="billing-tabs">
+                            <!-- Helper tabs injected here -->
+                            <button class="tab-pill active">All</button>
+                        </div>
+                    </header>
+                    <div class="product-grid" id="billing-grid">
+                        <!-- Product cards injected here -->
+                    </div>
+                </div>
+
+                <div class="billing-sidebar">
+                    <h2>Current Bill</h2>
+                    <div class="cart-items" id="cart-items">
+                        <!-- Cart items injected here -->
+                        <div class="empty-cart">Cart is empty</div>
+                    </div>
+
+                    <div class="billing-summary">
+                        <div class="summary-row">
+                            <span>Subtotal</span>
+                            <span id="bill-subtotal">₹0.00</span>
+                        </div>
+
+                        <div class="discount-section">
+                            <label>Discount</label>
+                            <select id="discount-type" onchange="calculateTotals()">
+                                <option value="none">None</option>
+                                <option value="flat">Flat (₹)</option>
+                                <option value="percentage">Percent (%)</option>
+                            </select>
+                            <input type="number" id="discount-value" class="hidden" placeholder="Value"
+                                oninput="calculateTotals()">
+                        </div>
+
+                        <div class="summary-row total">
+                            <span>Total</span>
+                            <span id="bill-total">₹0.00</span>
+                        </div>
+
+                        <div class="payment-mode">
+                            <label>Payment Mode</label>
+                            <div class="mode-options">
+                                <label><input type="radio" name="paymode" value="CASH" checked> Cash</label>
+                                <label><input type="radio" name="paymode" value="UPI"> UPI</label>
+                                <label><input type="radio" name="paymode" value="OTHER"> Other</label>
+                            </div>
+                        </div>
+
+                        <button class="checkout-btn" onclick="generateBill()">Generate Bill</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sales View -->
+        <section id="sales" class="view hidden">
+            <header class="view-header">
+                <h1>Sales History</h1>
+                <div class="sales-controls">
+                    <!-- Filters -->
+                    <div class="control-group">
+                        <select id="sales-filter-payment" onchange="loadSales()">
+                            <option value="all">All Payment Modes</option>
+                            <option value="CASH">Cash</option>
+                            <option value="UPI">UPI</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                        <select id="sales-sort" onchange="loadSales()">
+                            <option value="date-desc">Date (Newest First)</option>
+                            <option value="date-asc">Date (Oldest First)</option>
+                            <option value="amount-desc">Amount (High to Low)</option>
+                            <option value="amount-asc">Amount (Low to High)</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <input type="date" id="sales-date-from" onchange="loadSales()">
+                        <span class="separator">to</span>
+                        <input type="date" id="sales-date-to" onchange="loadSales()">
+                        <input type="number" id="sales-search-bill" placeholder="Bill #" oninput="loadSales()">
+                    </div>
+                </div>
+            </header>
+
+            <div class="sales-table-container">
+                <table class="sales-table">
+                    <thead>
+                        <tr>
+                            <th>Bill #</th>
+                            <th>Date & Time</th>
+                            <th>Payment Mode</th>
+                            <th>Items</th>
+                            <th>Total Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sales-list">
+                        <!-- Sales injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <!-- Add Product Modal -->
+        <div id="modal-add-product" class="modal hidden">
+            <h2>Add Product</h2>
+            <form id="add-product-form">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="p-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Price (₹)</label>
+                    <input type="number" id="p-price" required min="0">
+                </div>
+                <div class="form-group">
+                    <label>Stock</label>
+                    <input type="number" id="p-stock" required min="0">
+                </div>
+                <div class="form-group">
+                    <label>Category (Tab)</label>
+                    <select id="p-tab" required></select>
+                </div>
+                <div class="form-group checkbox">
+                    <label><input type="checkbox" id="p-house"> In-house made?</label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" onclick="closeModals()">Cancel</button>
+                    <button type="submit" class="save-btn">Save Product</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Add Tab Modal -->
+        <div id="modal-add-tab" class="modal hidden">
+            <h2>New Category Tab</h2>
+            <form id="add-tab-form">
+                <div class="form-group">
+                    <label>Tab Name</label>
+                    <input type="text" id="t-name" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" onclick="closeModals()">Cancel</button>
+                    <button type="submit" class="save-btn">Create Tab</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Edit Product Modal (Full version) -->
+        <div id="modal-edit-product" class="modal hidden">
+            <h2>Edit Product</h2>
+            <input type="hidden" id="edit-p-id">
+            <form id="edit-product-form">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="edit-p-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Price (₹)</label>
+                    <input type="number" id="edit-p-price" required min="0">
+                </div>
+                <div class="form-group">
+                    <label>Stock</label>
+                    <input type="number" id="edit-p-stock" required min="0">
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="edit-p-tab" required></select>
+                </div>
+                <div class="form-group checkbox">
+                    <label><input type="checkbox" id="edit-p-house"> In-house made?</label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" onclick="closeModals()">Cancel</button>
+                    <button type="submit" class="save-btn">Update Product</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

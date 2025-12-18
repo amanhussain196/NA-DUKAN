@@ -1,0 +1,1529 @@
+// CONFIGURATION
+// Replace these with your project details from Supabase Dashboard -> Project Settings -> API
+const SUPABASE_URL = 'https://frmyusjvjbqzenlnvfsf.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZybXl1c2p2amJxemVubG52ZnNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNTg2MDEsImV4cCI6MjA4MTYzNDYwMX0.RtHPFhYDTnj8q-6QYVNgeOiA_ZhzKRiVPtvBkdtKUbE';
+
+// State
+let supabase = null;
+let appState = {
+    tabs: [],
+    products: [],
+    cart: [],
+    currentBillingTab: 'all',
+    currentInventoryTab: 'all',
+    dashboardFilter: 'today',
+    dashboardFilter: 'today',
+    charts: { payment: null, revenue: null, bills: null, velocity: null, billVelocity: null, product: null },
+    dashboardData: null // Cache for bills, items, etc.
+};
+
+// Intialize
+window.addEventListener('DOMContentLoaded', async () => {
+    if (SUPABASE_URL === 'YOUR_SUPABASE_URL_HERE' || SUPABASE_KEY === 'YOUR_SUPABASE_ANON_KEY_HERE') {
+        document.getElementById('config-warning').classList.remove('hidden');
+        console.error("Supabase not configured.");
+        return;
+    }
+
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // Initial Load
+    await loadInventory();
+    loadDashboard('today');
+
+    // Set default date inputs to today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('date-from').value = today;
+    document.getElementById('date-to').value = today;
+
+    // Set default sales date inputs (last 30 days maybe? or just leave empty for all time? Let's default to today for now)
+    document.getElementById('sales-date-from').value = today;
+    document.getElementById('sales-date-to').value = today;
+
+    // Load Initial Data
+    await fetchTabs();
+    await fetchProducts();
+    loadDashboard('today');
+});
+
+// Navigation
+function switchView(viewId) {
+    // Hide all views
+    document.querySelectorAll('.view').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+
+    // Show selected
+    document.getElementById(viewId).classList.remove('hidden');
+
+    // Highlight nav
+    const btn = Array.from(document.querySelectorAll('.nav-btn')).find(b => b.getAttribute('onclick').includes(viewId));
+    if (btn) btn.classList.add('active');
+
+    // Refresh data if needed
+    if (viewId === 'inventory') renderInventoryList();
+    if (viewId === 'billing') renderBilling();
+    if (viewId === 'dashboard') loadDashboard(appState.dashboardFilter);
+    if (viewId === 'sales') loadSales();
+}
+
+// ==========================================
+// SALES HISTORY
+// ==========================================
+
+async function loadSales() {
+    if (!supabase) return;
+
+    // Get Filter Values
+    const payMode = document.getElementById('sales-filter-payment').value;
+    const sort = document.getElementById('sales-sort').value;
+    const dateFrom = document.getElementById('sales-date-from').value;
+    const dateTo = document.getElementById('sales-date-to').value;
+    const searchBill = document.getElementById('sales-search-bill').value;
+
+    let query = supabase.from('bills').select('*');
+
+    // Apply Filters
+    if (payMode !== 'all') {
+        query = query.eq('payment_mode', payMode);
+    }
+
+    if (dateFrom) {
+        query = query.gte('created_at', new Date(dateFrom).toISOString());
+    }
+
+    if (dateTo) {
+        query = query.lte('created_at', new Date(new Date(dateTo).setHours(23, 59, 59)).toISOString());
+    }
+
+    if (searchBill) {
+        query = query.eq('bill_number', searchBill);
+    }
+
+    // Apply Sort
+    if (sort === 'date-desc') query = query.order('created_at', { ascending: false });
+    if (sort === 'date-asc') query = query.order('created_at', { ascending: true });
+    if (sort === 'amount-desc') query = query.order('final_amount', { ascending: false });
+    if (sort === 'amount-asc') query = query.order('final_amount', { ascending: true });
+
+    const { data: bills, error } = await query;
+
+    if (error) {
+        console.error('Error loading sales:', error);
+        return;
+    }
+
+    renderSales(bills || []);
+}
+
+function renderSales(bills) {
+    const tbody = document.getElementById('sales-list');
+    tbody.innerHTML = '';
+
+    if (bills.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">No sales found</td></tr>';
+        return;
+    }
+
+    bills.forEach(bill => {
+        const tr = document.createElement('tr');
+        const date = new Date(bill.created_at);
+        const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        tr.innerHTML = `
+            <td>#${bill.bill_number || 'N/A'}</td>
+            <td>${dateStr}</td>
+            <td>${bill.payment_mode}</td>
+            <td><button onclick="viewBillDetails('${bill.id}')" class="action-btn small">View Items</button></td>
+            <td style="font-weight:600">₹${bill.final_amount.toFixed(2)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function viewBillDetails(billId) {
+    // Ideally this would show a modal, but for MVP let's just alert the items or console log
+    // Or we can quickly build a simple string to alert
+    const { data: items, error } = await supabase
+        .from('bill_items')
+        .select('*')
+        .eq('bill_id', billId);
+
+    if (error || !items) {
+        alert('Could not load items');
+        return;
+    }
+
+    let msg = `Bill Items:\n`;
+    items.forEach(i => {
+        msg += `- ${i.product_name} x${i.quantity} (₹${i.price})\n`;
+    });
+    alert(msg);
+}
+
+// ==========================================
+// INVENTORY MANAGEMENT
+// ==========================================
+
+async function loadInventory() {
+    if (!supabase) return;
+
+    // Fetch Tabs
+    const { data: tabs, error: tabsError } = await supabase
+        .from('product_tabs')
+        .select('*')
+        .order('sort_order', { ascending: true });
+
+    if (tabsError) console.error('Error loading tabs:', tabsError);
+    else appState.tabs = tabs || [];
+
+    // Fetch Products
+    const { data: products, error: prodError } = await supabase
+        .from('products')
+        .select('*')
+        .order('name', { ascending: true });
+
+    if (prodError) console.error('Error loading products:', prodError);
+    else appState.products = products || [];
+
+    renderInventoryTabs();
+    renderInventoryTabs();
+    renderInventoryList();
+}
+
+function renderInventoryTabs() {
+    const container = document.getElementById('inventory-tabs');
+    container.innerHTML = '';
+
+    // All Tab
+    const allPill = document.createElement('div');
+    allPill.className = `tab-pill ${appState.currentInventoryTab === 'all' ? 'active' : ''}`;
+    allPill.textContent = 'All';
+    allPill.onclick = () => { appState.currentInventoryTab = 'all'; renderInventoryTabs(); renderInventoryList(); };
+    container.appendChild(allPill);
+
+    appState.tabs.forEach(tab => {
+        const pill = document.createElement('div');
+        pill.className = `tab-pill ${appState.currentInventoryTab === tab.id ? 'active' : ''}`;
+        pill.textContent = tab.name;
+        pill.onclick = () => { appState.currentInventoryTab = tab.id; renderInventoryTabs(); renderInventoryList(); };
+        container.appendChild(pill);
+    });
+}
+
+function renderInventoryList() {
+    const container = document.getElementById('inventory-list');
+    container.innerHTML = '';
+
+    const filtered = appState.currentInventoryTab === 'all'
+        ? appState.products
+        : appState.products.filter(p => p.tab_id === appState.currentInventoryTab);
+
+    if (filtered.length === 0) {
+        container.innerHTML = '<div style="padding:1rem; text-align:center; color:var(--text-secondary)">No items in this category</div>';
+        return;
+    }
+
+    filtered.forEach(p => {
+        const tabName = appState.tabs.find(t => t.id === p.tab_id)?.name || 'Uncategorized';
+        const stockDisplay = p.is_in_house ? '<span style="color:var(--success-color); font-weight:600">Unlimited</span>' : p.stock;
+
+        const item = document.createElement('div');
+        item.className = 'inventory-item';
+        item.innerHTML = `
+            <div class="item-info">
+                <h4>${p.name}</h4>
+                <div class="item-meta">₹${p.price} • Stock: ${stockDisplay} • ${tabName}</div>
+            </div>
+            <div class="item-actions">
+                <button onclick="openEditProduct('${p.id}')">Edit</button>
+                <button onclick="deleteProduct('${p.id}')" style="color:var(--danger-color); border-color:var(--danger-color)">Delete</button>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
+
+async function deleteProduct(id) {
+    if (!confirm('Are you sure you want to delete this product?')) return;
+
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) alert('Error deleting product');
+    else loadInventory();
+}
+
+// Modals
+const modalOverlay = document.getElementById('modal-overlay');
+const modals = document.querySelectorAll('.modal');
+
+function closeModals() {
+    modalOverlay.classList.add('hidden');
+    modals.forEach(m => m.classList.add('hidden'));
+    document.getElementById('add-product-form').reset();
+    document.getElementById('add-tab-form').reset();
+    document.getElementById('edit-product-form').reset();
+}
+
+function openAddTabModal() {
+    modalOverlay.classList.remove('hidden');
+    document.getElementById('modal-add-tab').classList.remove('hidden');
+}
+
+function openAddProductModal() {
+    // Populate tab select
+    const select = document.getElementById('p-tab');
+    select.innerHTML = '<option value="">Select Tab</option>';
+    appState.tabs.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        select.appendChild(opt);
+    });
+
+    modalOverlay.classList.remove('hidden');
+    document.getElementById('modal-add-product').classList.remove('hidden');
+}
+
+function openEditProduct(productId) {
+    const product = appState.products.find(p => p.id === productId);
+    if (!product) return;
+
+    document.getElementById('edit-p-id').value = productId;
+    document.getElementById('edit-p-name').value = product.name;
+    document.getElementById('edit-p-price').value = product.price;
+    document.getElementById('edit-p-stock').value = product.stock;
+    document.getElementById('edit-p-house').checked = product.is_in_house;
+
+    // Populate tab select
+    const select = document.getElementById('edit-p-tab');
+    select.innerHTML = '';
+    appState.tabs.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        if (t.id === product.tab_id) opt.selected = true;
+        select.appendChild(opt);
+    });
+
+    modalOverlay.classList.remove('hidden');
+    document.getElementById('modal-edit-product').classList.remove('hidden');
+}
+
+// Add Tab
+document.getElementById('add-tab-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('t-name').value;
+
+    const { data, error } = await supabase
+        .from('product_tabs')
+        .insert([{ name, sort_order: appState.tabs.length }]);
+
+    if (error) alert('Error creating tab');
+    else {
+        closeModals();
+        loadInventory();
+    }
+});
+
+// Add Product
+document.getElementById('add-product-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('p-name').value;
+    const price = document.getElementById('p-price').value;
+    const stock = document.getElementById('p-stock').value;
+    const tab_id = document.getElementById('p-tab').value;
+    const is_in_house = document.getElementById('p-house').checked;
+
+    const { error } = await supabase
+        .from('products')
+        .insert([{ name, price, stock, tab_id, is_in_house }]);
+
+    if (error) alert('Error creating product');
+    else {
+        closeModals();
+        loadInventory();
+    }
+});
+
+// Edit Product
+document.getElementById('edit-product-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('edit-p-id').value;
+    const name = document.getElementById('edit-p-name').value;
+    const price = document.getElementById('edit-p-price').value;
+    const stock = document.getElementById('edit-p-stock').value;
+    const tab_id = document.getElementById('edit-p-tab').value;
+    const is_in_house = document.getElementById('edit-p-house').checked;
+
+    const { error } = await supabase
+        .from('products')
+        .update({ name, price, stock, tab_id, is_in_house })
+        .eq('id', id);
+
+    if (error) alert('Error updating product');
+    else {
+        closeModals();
+        loadInventory();
+    }
+});
+
+// ==========================================
+// BILLING (POS)
+// ==========================================
+
+function renderBilling() {
+    // Render Tabs
+    const tabsContainer = document.getElementById('billing-tabs');
+    tabsContainer.innerHTML = '';
+
+    // "All" Tab
+    const allBtn = document.createElement('button');
+    allBtn.className = `tab-pill ${appState.currentBillingTab === 'all' ? 'active' : ''}`;
+    allBtn.textContent = `All (${appState.products.length})`;
+    allBtn.onclick = () => { appState.currentBillingTab = 'all'; renderBilling(); };
+    tabsContainer.appendChild(allBtn);
+
+    appState.tabs.forEach(tab => {
+        const btn = document.createElement('button');
+        btn.className = `tab-pill ${appState.currentBillingTab === tab.id ? 'active' : ''}`;
+
+        // Count products in tab
+        const count = appState.products.filter(p => p.tab_id === tab.id).length;
+        btn.textContent = `${tab.name} (${count})`;
+
+        btn.onclick = () => { appState.currentBillingTab = tab.id; renderBilling(); };
+        tabsContainer.appendChild(btn);
+    });
+
+    // Render Grid
+    const grid = document.getElementById('billing-grid');
+    grid.innerHTML = '';
+
+    const filtered = appState.currentBillingTab === 'all'
+        ? appState.products
+        : appState.products.filter(p => p.tab_id === appState.currentBillingTab);
+
+    filtered.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.innerHTML = `
+            <h4>${p.name}</h4>
+            <div class="card-footer">
+                <span class="price">₹${p.price}</span>
+                <button class="add-btn" onclick="addToCart('${p.id}')">+</button>
+            </div>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+function addToCart(productId) {
+    const product = appState.products.find(p => p.id === productId);
+    if (!product) return;
+
+    if (product.stock <= 0 && !product.is_in_house) {
+        alert('Out of stock!');
+        return;
+    }
+
+    const existing = appState.cart.find(item => item.product.id === productId);
+    if (existing) {
+        // Check stock limit
+        if (existing.qty + 1 > product.stock && !product.is_in_house) {
+            alert('Stock limit reached for this bill');
+            return;
+        }
+        existing.qty++;
+    } else {
+        appState.cart.push({ product, qty: 1 });
+    }
+    renderCart();
+}
+
+function renderCart() {
+    const container = document.getElementById('cart-items');
+    container.innerHTML = '';
+
+    if (appState.cart.length === 0) {
+        container.innerHTML = '<div class="empty-cart">Cart is empty</div>';
+    } else {
+        appState.cart.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'cart-item';
+            div.innerHTML = `
+                <div class="cart-item-name">${item.product.name} (₹${item.product.price})</div>
+                <div class="qty-controls">
+                    <button class="qty-btn" onclick="updateCartQty(${index}, -1)">-</button>
+                    <span>${item.qty}</span>
+                    <button class="qty-btn" onclick="updateCartQty(${index}, 1)">+</button>
+                </div>
+                <button class="remove-btn" onclick="removeFromCart(${index})">&times;</button>
+            `;
+            container.appendChild(div);
+        });
+    }
+    calculateTotals();
+}
+
+function updateCartQty(index, delta) {
+    const item = appState.cart[index];
+    const newQty = item.qty + delta;
+
+    if (newQty <= 0) {
+        removeFromCart(index);
+    } else {
+        if (newQty > item.product.stock && !item.product.is_in_house) {
+            alert('Cannot exceed available stock');
+            return;
+        }
+        item.qty = newQty;
+        renderCart();
+    }
+}
+
+function removeFromCart(index) {
+    appState.cart.splice(index, 1);
+    renderCart();
+}
+
+function calculateTotals() {
+    const subtotal = appState.cart.reduce((sum, item) => sum + (item.product.price * item.qty), 0);
+
+    let discountType = document.getElementById('discount-type').value;
+    let discountValue = parseFloat(document.getElementById('discount-value').value) || 0;
+
+    // Toggle input visibility
+    const disInput = document.getElementById('discount-value');
+    if (discountType === 'none') disInput.classList.add('hidden');
+    else disInput.classList.remove('hidden');
+
+    let final = subtotal;
+    if (discountType === 'flat') final = subtotal - discountValue;
+    if (discountType === 'percentage') final = subtotal - (subtotal * (discountValue / 100));
+
+    if (final < 0) final = 0;
+
+    document.getElementById('bill-subtotal').textContent = `₹${subtotal.toFixed(2)}`;
+    document.getElementById('bill-total').textContent = `₹${final.toFixed(2)}`;
+}
+
+async function generateBill() {
+    if (appState.cart.length === 0) {
+        alert('Cart is empty');
+        return;
+    }
+
+    const subtotal = appState.cart.reduce((sum, item) => sum + (item.product.price * item.qty), 0);
+    const discountType = document.getElementById('discount-type').value;
+    const discountValue = parseFloat(document.getElementById('discount-value').value) || 0;
+
+    let final = subtotal;
+    if (discountType === 'flat') final = subtotal - discountValue;
+    if (discountType === 'percentage') final = subtotal - (subtotal * (discountValue / 100));
+    if (final < 0) final = 0;
+
+    const paymentMode = document.querySelector('input[name="paymode"]:checked').value;
+
+    // 1. Insert Bill
+    const { data: billData, error: billError } = await supabase
+        .from('bills')
+        .insert([{
+            subtotal,
+            discount_type: discountType,
+            discount_value: discountValue,
+            final_amount: final,
+            payment_mode: paymentMode
+        }])
+        .select()
+        .single();
+
+    if (billError) {
+        alert('Error saving bill: ' + billError.message);
+        return;
+    }
+
+    const billId = billData.id;
+
+    // 2. Insert Bill Items
+    const itemsToInsert = appState.cart.map(item => ({
+        bill_id: billId,
+        product_id: item.product.id,
+        product_name: item.product.name,
+        quantity: item.qty,
+        price: item.product.price
+    }));
+
+    const { error: itemsError } = await supabase.from('bill_items').insert(itemsToInsert);
+
+    if (itemsError) {
+        console.error('Error saving items', itemsError);
+        alert('Bill saved but items failed. Please check data.');
+    }
+
+    // 3. Update Stock (Ignore for In-house)
+    for (const item of appState.cart) {
+        if (!item.product.is_in_house) {
+            const newStock = item.product.stock - item.qty;
+            await supabase.from('products').update({ stock: newStock }).eq('id', item.product.id);
+        }
+    }
+
+    // Success
+    alert(`Bill Generated Successfully! Total: ₹${final.toFixed(2)}`);
+    appState.cart = [];
+    renderCart();
+
+    // Refresh Inventory and Dashboard
+    await loadInventory(); // to get new stock
+    loadDashboard(appState.dashboardFilter); // update stats
+}
+
+// ==========================================
+// DASHBOARD
+// ==========================================
+
+// Date filters
+document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        // UI
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        // Logic
+        if (btn.id === 'custom-date-btn') {
+            document.getElementById('custom-date-inputs').classList.remove('hidden');
+        } else {
+            document.getElementById('custom-date-inputs').classList.add('hidden');
+            const range = btn.getAttribute('data-range');
+            appState.dashboardFilter = range;
+            loadDashboard(range);
+        }
+    });
+});
+
+
+
+// Helper for colors
+function getChartColor(idx, isBright) {
+    const brightColors = [
+        '#EF4444', '#F97316', '#F59E0B', '#10B981', '#3B82F6',
+        '#6366F1', '#8B5CF6', '#EC4899', '#14B8A6', '#F43F5E'
+    ];
+    const dullColors = [
+        '#78716c', '#a8a29e', '#d6d3d1', '#9ca3af', '#94a3b8',
+        '#64748b', '#475569', '#52525b', '#71717a', '#a1a1aa'
+    ];
+    if (isBright) return brightColors[idx % brightColors.length];
+    return dullColors[idx % dullColors.length];
+}
+
+function applyCustomDate() {
+    appState.dashboardFilter = 'custom';
+    loadDashboard('custom');
+}
+
+async function loadDashboard(range) {
+    if (!supabase) return;
+
+    try {
+        let query = supabase.from('bills').select('final_amount, payment_mode, created_at, id');
+
+        const now = new Date();
+        let startTime;
+        // ... (rest of filtering logic is fine)
+
+        if (range === 'today') {
+            startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        } else if (range === 'week') {
+            const firstDay = new Date(now.setDate(now.getDate() - now.getDay()));
+            firstDay.setHours(0, 0, 0, 0);
+            startTime = firstDay.toISOString();
+        } else if (range === 'month') {
+            startTime = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        } else if (range === 'year') {
+            startTime = new Date(now.getFullYear(), 0, 1).toISOString();
+        } else if (range === 'custom') {
+            const d1 = document.getElementById('date-from').value;
+            const d2 = document.getElementById('date-to').value;
+            if (!d1 || !d2) return;
+
+            query = query.gte('created_at', new Date(d1).toISOString())
+                .lte('created_at', new Date(new Date(d2).setHours(23, 59, 59)).toISOString());
+        }
+
+        if (range !== 'custom' && startTime) {
+            query = query.gte('created_at', startTime);
+        }
+
+        const { data: bills, error } = await query;
+        if (error) {
+            console.error('Error fetching dashboard stats:', error);
+            return;
+        }
+
+        // Calculate Stats
+        // Calculate Stats
+        const safeBills = bills || [];
+        const totalSales = safeBills.reduce((sum, b) => sum + b.final_amount, 0);
+        const cash = safeBills.filter(b => b.payment_mode === 'CASH').reduce((sum, b) => sum + b.final_amount, 0);
+        const upi = safeBills.filter(b => b.payment_mode === 'UPI').reduce((sum, b) => sum + b.final_amount, 0);
+        const other = safeBills.filter(b => b.payment_mode === 'OTHER').reduce((sum, b) => sum + b.final_amount, 0);
+        const count = safeBills.length;
+
+        // Update UI
+        document.getElementById('stat-total-sales').textContent = `₹${totalSales.toFixed(2)}`;
+        document.getElementById('stat-cash').textContent = `₹${cash.toFixed(2)}`;
+        document.getElementById('stat-upi').textContent = `₹${upi.toFixed(2)}`;
+        document.getElementById('stat-other').textContent = `₹${other.toFixed(2)}`;
+        document.getElementById('stat-bill-count').textContent = count;
+
+        // --- Render Charts ---
+        // Update chart IDs just for safety if logic was wrong
+        // --- Render Charts (Moved below to wait for items) ---
+
+
+        // --- Top Products Logic ---
+        let itemsQuery = supabase.from('bill_items').select('product_name, quantity, price, created_at');
+
+        if (range !== 'custom' && startTime) {
+            itemsQuery = itemsQuery.gte('created_at', startTime);
+        } else if (range === 'custom') {
+            const d1 = document.getElementById('date-from').value;
+            const d2 = document.getElementById('date-to').value;
+            if (d1 && d2) {
+                itemsQuery = itemsQuery.gte('created_at', new Date(d1).toISOString())
+                    .lte('created_at', new Date(new Date(d2).setHours(23, 59, 59)).toISOString());
+            }
+        }
+
+        const { data: fetchedItems, error: itemsError } = await itemsQuery;
+
+        if (itemsError) {
+            console.error("Error loading top products", itemsError);
+        } else {
+            renderTopProducts(fetchedItems || []);
+
+            // Cache Data for Filter Updates
+            appState.dashboardData = {
+                bills: safeBills,
+                items: fetchedItems || [],
+                range: range,
+                startTime: startTime
+            };
+
+            // Re-render charts with items for Product Trend
+            if (typeof renderCharts === 'function') {
+                renderCharts(safeBills, range, startTime, fetchedItems || []);
+            }
+        }
+    } catch (err) {
+        console.error('DASHBOARD ERROR:', err);
+        // alert('Dashboard Error: ' + err.message); // Uncomment if needed for user visibility
+    }
+}
+
+function renderTopProducts(items) {
+    const container = document.getElementById('top-products-list');
+    container.innerHTML = '';
+
+    if (items.length === 0) {
+        container.innerHTML = '<div style="padding:1rem; text-align:center; color:var(--text-secondary)">No sales in this period</div>';
+        return;
+    }
+
+    // Aggregate
+    const sales = {};
+    items.forEach(i => {
+        if (!sales[i.product_name]) sales[i.product_name] = 0;
+        sales[i.product_name] += i.quantity;
+    });
+
+    // Sort
+    const sorted = Object.entries(sales)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 3); // Top 3
+
+    sorted.forEach(([name, qty], index) => {
+        const div = document.createElement('div');
+        div.className = 'top-product-item';
+
+        let medal = '';
+        if (index === 0) medal = '🥇';
+        else if (index === 1) medal = '🥈';
+        else if (index === 2) medal = '🥉';
+
+        div.innerHTML = `
+            <span class="rank" style="font-size: 1.5rem; margin-right: 0.5rem;">${medal}</span>
+            <div style="flex:1;">
+                <span class="name" style="font-weight:600; font-size:1.05rem;">${name}</span>
+            </div>
+            <span class="qty" style="font-weight:bold; color:var(--primary-color);">${qty} sold</span>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function renderCharts(bills, range, startTime, items) {
+    if (!window.Chart) return;
+
+    // 1. Payment Mode Pie Chart
+    const payData = {
+        CASH: bills.filter(b => b.payment_mode === 'CASH').reduce((sum, b) => sum + b.final_amount, 0),
+        UPI: bills.filter(b => b.payment_mode === 'UPI').reduce((sum, b) => sum + b.final_amount, 0),
+        OTHER: bills.filter(b => b.payment_mode === 'OTHER').reduce((sum, b) => sum + b.final_amount, 0),
+    };
+
+    const ctxPay = document.getElementById('chart-payment').getContext('2d');
+    if (appState.charts.payment) appState.charts.payment.destroy();
+
+    appState.charts.payment = new Chart(ctxPay, {
+        type: 'doughnut',
+        data: {
+            labels: ['Cash', 'UPI', 'Other'],
+            datasets: [{
+                data: [payData.CASH, payData.UPI, payData.OTHER],
+                backgroundColor: ['#10B981', '#2563EB', '#6B7280'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { position: 'bottom' }
+            },
+            maintainAspectRatio: false
+        }
+    });
+
+    // 2. Revenue Trend Line Chart (Cumulative)
+    const ctxRev = document.getElementById('chart-revenue').getContext('2d');
+    if (appState.charts.revenue) appState.charts.revenue.destroy();
+
+    // Prepare buckets based on range
+    let labels = [];
+    let buckets = [];
+
+    // Helper to format date
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    if (range === 'today') {
+        // 0 to 23 hours
+        for (let i = 0; i < 24; i++) {
+            labels.push(i === 0 ? '12 AM' : i === 12 ? '12 PM' : i > 12 ? `${i - 12} PM` : `${i} AM`);
+            buckets.push(0);
+        }
+    } else if (range === 'week') {
+        // Last 7 days or This relative week? 
+        // Code in loadDashboard uses "Last Sunday/Monday" logic?
+        // Let's assume standard Mon-Sun or Sun-Sat. 
+        // For simplicity, let's map bills to day names.
+        // Better: Initialize buckets for the actual dates in range if strict, 
+        // but for "This Week" (assuming Mon-Sun), let's just do Mon-Sun.
+        labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        buckets = new Array(7).fill(0);
+    } else if (range === 'month') {
+        // Week 1 to 5
+        labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'];
+        buckets = new Array(5).fill(0);
+    } else if (range === 'year') {
+        labels = months;
+        buckets = new Array(12).fill(0);
+    } else {
+        // Custom: Just group by date
+        // Since custom can be anything, let's just sort bills and do a simple line
+        // But user asked for "Always Increase", so we just do cumulative on whatever data comes in
+        // Simplified custom: Group by Date
+    }
+
+    // Fill buckets
+    const billList = [...bills].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+    // Note: If range is custom, we might handle differently, but let's try to fit into buckets if standard
+    if (range === 'custom') {
+        const fromVal = document.getElementById('date-from').value;
+        const toVal = document.getElementById('date-to').value;
+
+        // Parse as Local Midnight to avoid timezone shifts
+        const [y1, m1, day1] = fromVal.split('-').map(Number);
+        const [y2, m2, day2] = toVal.split('-').map(Number);
+        const d1 = new Date(y1, m1 - 1, day1);
+        const d2 = new Date(y2, m2 - 1, day2);
+
+        const diffTime = Math.abs(d2 - d1);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include start date
+
+        if (diffDays <= 20) {
+            // Day by Day
+            // Initialize buckets for every day in range to have continuity
+            for (let i = 0; i < diffDays; i++) {
+                const tempDate = new Date(d1);
+                tempDate.setDate(d1.getDate() + i);
+                labels.push(tempDate.toLocaleDateString());
+                buckets.push(0);
+            }
+
+            billList.forEach(b => {
+                const bDate = new Date(b.created_at);
+                bDate.setHours(0, 0, 0, 0);
+
+                // Diff in days (using Round to be safe with DST/Timezone drifts if any)
+                const dayDiff = Math.round((bDate - d1) / (1000 * 60 * 60 * 24));
+
+                if (dayDiff >= 0 && dayDiff < buckets.length) {
+                    buckets[dayDiff] += b.final_amount;
+                }
+            });
+
+        } else {
+            // Every 5 days
+            // Create buckets: Day 1-5, Day 6-10...
+            const numBuckets = Math.ceil(diffDays / 5);
+            for (let i = 0; i < numBuckets; i++) {
+                const startDay = i * 5;
+                const endDay = Math.min((i + 1) * 5 - 1, diffDays - 1);
+
+                const sDate = new Date(d1); sDate.setDate(d1.getDate() + startDay);
+                const eDate = new Date(d1); eDate.setDate(d1.getDate() + endDay);
+
+                labels.push(`${sDate.getDate()}/${sDate.getMonth() + 1} - ${eDate.getDate()}/${eDate.getMonth() + 1}`);
+                buckets.push(0);
+            }
+
+            billList.forEach(b => {
+                const bDate = new Date(b.created_at);
+                bDate.setHours(0, 0, 0, 0);
+                const dayDiff = Math.round((bDate - d1) / (1000 * 60 * 60 * 24));
+                const bucketIdx = Math.floor(dayDiff / 5);
+
+                if (bucketIdx >= 0 && bucketIdx < buckets.length) {
+                    buckets[bucketIdx] += b.final_amount;
+                }
+            });
+        }
+    } else {
+        // Standard Ranges
+        billList.forEach(b => {
+            const d = new Date(b.created_at);
+            let idx = -1;
+
+            if (range === 'today') {
+                idx = d.getHours();
+            } else if (range === 'week') {
+                // created_at Day (0=Sun, 1=Mon...). 
+                // We want Mon(0) to Sun(6).
+                // JS: 0=Sun, 1=Mon.
+                // shift: (day + 6) % 7 ? -> Sun(0)->6, Mon(1)->0
+                const jsDay = d.getDay();
+                idx = (jsDay + 6) % 7;
+            } else if (range === 'month') {
+                const date = d.getDate();
+                idx = Math.floor((date - 1) / 7); // 0-4
+                if (idx > 4) idx = 4;
+            } else if (range === 'year') {
+                idx = d.getMonth();
+            }
+
+            if (idx >= 0 && idx < buckets.length) {
+                buckets[idx] += b.final_amount;
+            }
+        });
+    }
+
+    // Calculate Cumulative
+    let runningTotal = 0;
+    let cumulativeData = buckets.map(val => {
+        runningTotal += val;
+        return runningTotal;
+    });
+
+    // Trim Future Data
+    const now = new Date();
+    let limitIdx = buckets.length - 1; // Default to showing all
+
+    if (range === 'today') {
+        limitIdx = now.getHours();
+    } else if (range === 'week') {
+        limitIdx = (now.getDay() + 6) % 7;
+    } else if (range === 'month') {
+        limitIdx = Math.floor((now.getDate() - 1) / 7);
+        if (limitIdx > 4) limitIdx = 4;
+    } else if (range === 'year') {
+        limitIdx = now.getMonth();
+    } else if (range === 'custom') {
+        // Handle Future Crop for Custom Range
+        const msPerDay = 1000 * 60 * 60 * 24;
+        const fromVal = document.getElementById('date-from').value;
+        const [y1, m1, day1] = fromVal.split('-').map(Number);
+        const dStart = new Date(y1, m1 - 1, day1);
+
+        const nowMidnight = new Date();
+        nowMidnight.setHours(0, 0, 0, 0);
+
+        // Days from Start to Today
+        const daysSinceStart = Math.round((nowMidnight - dStart) / msPerDay);
+
+        // Determine mode (Day-by-Day or 5-day)
+        const toVal = document.getElementById('date-to').value;
+        const [y2, m2, day2] = toVal.split('-').map(Number);
+        const dEnd = new Date(y2, m2 - 1, day2);
+        const totalDiff = Math.abs(dEnd - dStart);
+        const totalDays = Math.ceil(totalDiff / msPerDay) + 1;
+
+        if (totalDays <= 20) {
+            limitIdx = daysSinceStart;
+        } else {
+            limitIdx = Math.floor(daysSinceStart / 5);
+        }
+
+        // Limits
+        if (limitIdx < -1) limitIdx = -1; // All future
+        // if limitIdx >= buckets.length -1, keep default
+    }
+
+    // Slice provided we need to trim
+    if (limitIdx < labels.length - 1) {
+        // slice(0, limitIdx + 1) includes the current unit
+        const cut = limitIdx + 1;
+        // If cut < 0 (all future), slice(0,0) -> empty
+        const effectiveCut = Math.max(0, cut);
+
+        labels = labels.slice(0, effectiveCut);
+        cumulativeData = cumulativeData.slice(0, effectiveCut);
+        buckets = buckets.slice(0, effectiveCut); // Slice buckets too for Velocity
+    }
+
+    // Render
+    appState.charts.revenue = new Chart(ctxRev, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Total Revenue (Cumulative)',
+                data: cumulativeData,
+                borderColor: '#10B981', // Success color
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                tension: 0.4,
+                fill: true,
+                pointRadius: 2
+            }]
+        },
+        options: {
+            scales: {
+                y: { beginAtZero: true }
+            },
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return 'Total: ₹' + context.raw.toFixed(2);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    const ctxBills = document.getElementById('chart-bills').getContext('2d');
+    if (appState.charts.bills) appState.charts.bills.destroy();
+
+    // Re-calculating bill counts seems inefficient if not merged, but safest to ensure correct logic is 
+    // to copy the filling logic OR to have filled a secondary array above.
+    // Let's go do the Right Thing and fill a secondary array in the MAIN loop.
+    // Wait, I can't easily edit the middle of the function with this tool without replacing the whole block.
+    // So for now, I will indeed copy the logic (Code Duplication for MVP speed vs massive refactor risk).
+
+    // Actually, I can replace the entire renderCharts function content or just the part I know. 
+    // Let's try to just append the new chart logic using a NEW loop.
+    // IT IS FAST ENOUGH.
+
+    let billBuckets = new Array(buckets.length).fill(0);
+
+    if (range === 'custom') {
+        const fromVal = document.getElementById('date-from').value;
+        const toVal = document.getElementById('date-to').value;
+        const [y1, m1, day1] = fromVal.split('-').map(Number);
+        const d1 = new Date(y1, m1 - 1, day1);
+        const d2 = new Date(toVal.split('-')[0], toVal.split('-')[1] - 1, toVal.split('-')[2]);
+        const diffTime = Math.abs(d2 - d1);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+        if (diffDays <= 20) {
+            billList.forEach(b => {
+                const bDate = new Date(b.created_at);
+                bDate.setHours(0, 0, 0, 0);
+                const dayDiff = Math.round((bDate - d1) / (1000 * 60 * 60 * 24));
+                if (dayDiff >= 0 && dayDiff < billBuckets.length) {
+                    billBuckets[dayDiff] += 1;
+                }
+            });
+        } else {
+            billList.forEach(b => {
+                const bDate = new Date(b.created_at);
+                bDate.setHours(0, 0, 0, 0);
+                const dayDiff = Math.round((bDate - d1) / (1000 * 60 * 60 * 24));
+                const bucketIdx = Math.floor(dayDiff / 5);
+                if (bucketIdx >= 0 && bucketIdx < billBuckets.length) {
+                    billBuckets[bucketIdx] += 1;
+                }
+            });
+        }
+    } else {
+        billList.forEach(b => {
+            const d = new Date(b.created_at);
+            let idx = -1;
+            if (range === 'today') idx = d.getHours();
+            else if (range === 'week') idx = (d.getDay() + 6) % 7;
+            else if (range === 'month') {
+                idx = Math.floor((d.getDate() - 1) / 7);
+                if (idx > 4) idx = 4;
+            } else if (range === 'year') idx = d.getMonth();
+
+            if (idx >= 0 && idx < billBuckets.length) {
+                billBuckets[idx] += 1;
+            }
+        });
+    }
+
+    // Cumulative Bills
+    let runningBillCount = 0;
+    let cumulativeBillData = billBuckets.map(val => {
+        runningBillCount += val;
+        return runningBillCount;
+    });
+
+    // Trim Future for Bills (Sync with labels)
+    // Since labels are already trimmed, we just match the length
+    if (cumulativeBillData.length > labels.length) {
+        cumulativeBillData = cumulativeBillData.slice(0, labels.length);
+        billBuckets = billBuckets.slice(0, labels.length);
+    }
+
+    appState.charts.bills = new Chart(ctxBills, {
+        type: 'line',
+        data: {
+            labels: labels, // Shares labels with Revenue chart
+            datasets: [{
+                label: 'Total Bills (Cumulative)',
+                data: cumulativeBillData,
+                borderColor: '#F59E0B',
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                tension: 0.4,
+                fill: true,
+                pointRadius: 2
+            }]
+        },
+        options: {
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return 'Bills: ' + context.raw;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // 4. Period Revenue Bar Chart (Non-Cumulative) - "Revenue per every hr"
+    const ctxVel = document.getElementById('chart-velocity').getContext('2d');
+    if (appState.charts.velocity) appState.charts.velocity.destroy();
+
+    // Data: 'buckets' array from Step 2 (already calculated, non-cumulative)
+    // Labels: 'labels' array (already trimmed)
+    // We just need to slice 'buckets' to match 'labels' length.
+
+    let velData = buckets;
+    if (labels.length < buckets.length) {
+        velData = buckets.slice(0, labels.length);
+    }
+
+    appState.charts.velocity = new Chart(ctxVel, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Revenue',
+                data: velData,
+                backgroundColor: 'rgba(16, 185, 129, 0.6)', // Green (Emerald)
+                borderColor: '#10B981',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            scales: { y: { beginAtZero: true } },
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return 'Revenue: ₹' + context.raw.toFixed(2);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+
+
+    // 5. Bill Velocity Bar Chart (Non-Cumulative)
+    const ctxBillVel = document.getElementById('chart-bill-velocity').getContext('2d');
+    if (appState.charts.billVelocity) appState.charts.billVelocity.destroy();
+
+    let billVelData = billBuckets;
+    if (labels.length < billBuckets.length) {
+        billVelData = billBuckets.slice(0, labels.length);
+    }
+
+    appState.charts.billVelocity = new Chart(ctxBillVel, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Bills',
+                data: billVelData,
+                backgroundColor: 'rgba(245, 158, 11, 0.6)', // Amber
+                borderColor: 'rgba(245, 158, 11, 1)',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return 'Bills: ' + context.raw;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // 6. Product Sales Trend (Multi-Line)
+    renderProductTrendChartSimplified(billList, items, range, labels.length);
+
+    // 7. Render Sales Table
+    renderSalesTable(items);
+}
+
+// Separate function for complexity
+function renderProductTrendChart(bills, allItems, range, itemsLimit) {
+    const ctxProd = document.getElementById('chart-product').getContext('2d');
+    if (appState.charts.product) appState.charts.product.destroy();
+
+    // 1. Group items by Product ID
+    const productMap = {}; // { id: { name: '..', total: 0, buckets: [] } }
+
+    // Initialize map with ALL known products to ensure we capture even 0 sales if selected?
+    // For now, rely on sales history or appState.products if we want 0 sales.
+    // Let's use allItems (sales history)
+
+    // We need to know bucket logic again. 
+    // Ideally we pass "bucket mapper" function, but easier to just use the timestamps in allItems
+    // and map them to indices 0..itemsLimit-1.
+
+    // Re-use logic for index mapping (copy-paste for speed, ideally refactor)
+    // We need a helper to get Index from Date
+    const getBucketIndex = (dateStr) => {
+        const d = new Date(dateStr);
+        if (range === 'custom') {
+            const fromVal = document.getElementById('date-from').value;
+            const toVal = document.getElementById('date-to').value;
+            const [y1, m1, day1] = fromVal.split('-').map(Number);
+            const d1 = new Date(y1, m1 - 1, day1);
+            const d2 = new Date(toVal.split('-')[0], toVal.split('-')[1] - 1, toVal.split('-')[2]);
+            const diffTime = Math.abs(d2 - d1);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+            const bDate = new Date(dateStr); bDate.setHours(0, 0, 0, 0);
+            const dayDiff = Math.round((bDate - d1) / (1000 * 60 * 60 * 24));
+
+            if (diffDays <= 20) return dayDiff;
+            return Math.floor(dayDiff / 5);
+        }
+        if (range === 'today') return d.getHours();
+        if (range === 'week') return (d.getDay() + 6) % 7;
+        if (range === 'month') {
+            let idx = Math.floor((d.getDate() - 1) / 7);
+            return idx > 4 ? 4 : idx;
+        }
+        if (range === 'year') return d.getMonth();
+        return 0;
+    };
+
+    // Calculate totals and fill buckets
+    if (!allItems) allItems = []; // Safety
+
+    allItems.forEach(item => {
+        if (!productMap[item.product_name]) {
+            productMap[item.product_name] = {
+                name: item.product_name,
+                total: 0,
+                buckets: new Array(itemsLimit).fill(0)
+            };
+        }
+
+        productMap[item.product_name].total += item.quantity;
+
+        const idx = getBucketIndex(item.created_at);
+        if (idx >= 0 && idx < itemsLimit) {
+            productMap[item.product_name].buckets[idx] += item.quantity;
+        }
+    });
+
+    // 2. Select Products to Show
+    let productsToShow = []; // Array of objects
+
+    // If NO selection, pick Top 5 and Bottom 5 (from active sales)
+    // Note: This ignores products with 0 sales in this period if relying only on allItems.
+    // That is acceptable for "Trend of SOLD items".
+
+    // Convert map to array
+    let sortedProducts = Object.values(productMap).sort((a, b) => b.total - a.total);
+
+    if (appState.productTrendSelectedIds.length > 0) {
+        // Show selected names (stored as IDs? User said "search bar to select needed product")
+        // My dropdown implementation usually uses IDs. 
+        // But bill_items only has product_name easily available in the fetch? 
+
+        // Filter existing sales
+        productsToShow = sortedProducts.filter(p => appState.productTrendSelectedIds.includes(p.name));
+
+        // Add selected products with 0 sales if missing
+        appState.productTrendSelectedIds.forEach(name => {
+            if (!productsToShow.find(p => p.name === name)) {
+                productsToShow.push({
+                    name: name,
+                    total: 0,
+                    buckets: new Array(itemsLimit).fill(0)
+                });
+            }
+        });
+
+    } else {
+        // Top 5 (Bright)
+        const top5 = sortedProducts.slice(0, 5);
+        // Bottom 5 (Dull) - exclude those already in top 5 if total < 10
+        const bottom5 = sortedProducts.slice(-5).reverse(); // specific reverse? "Least selling"
+        // Actually "Least 5" usually means lowest non-zero? Or just lowest?
+        // Let's take last 5.
+        // If total products < 10, overlap?
+        // Unique merge
+        const combined = new Set([...top5, ...bottom5]);
+        productsToShow = Array.from(combined);
+    }
+
+    // 3. Prepare Datasets
+    const datasets = productsToShow.map((p, i) => {
+        // Determine color: 
+        let isBright = true;
+
+        // Identify if this P object is in the bottom slice
+        const isBottom = sortedProducts.slice(-5).includes(p);
+        const isTop = sortedProducts.slice(0, 5).includes(p);
+
+        // If overlap (e.g. only 3 products), prefer Bright
+        if (isBottom && !isTop) isBright = false;
+
+        // Cumulative
+        let running = 0;
+        const cumData = p.buckets.map(v => { running += v; return running; });
+
+        // Trim Future logic already handled by limiting buckets size to 'labels.length' passed in 'itemsLimit'? 
+        // Yes, caller passed labels.length.
+
+        return {
+            label: p.name,
+            data: cumData,
+            borderColor: getChartColor(i, isBright),
+            backgroundColor: getChartColor(i, isBright), // Point color?
+            tension: 0.3,
+            fill: false,
+            borderWidth: 2,
+            pointRadius: 3
+        };
+    });
+
+    // Render
+    appState.charts.product = new Chart(ctxProd, {
+        type: 'line',
+        data: {
+            labels: appState.charts.revenue.data.labels, // safe access to main labels
+            datasets: datasets
+        },
+        options: {
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    });
+}
+
+
+// Simplified version without dropdown
+function renderProductTrendChartSimplified(bills, allItems, range, itemsLimit) {
+    const ctxProd = document.getElementById('chart-product').getContext('2d');
+    if (appState.charts.product) appState.charts.product.destroy();
+
+    // 1. Group items by Product ID
+    const productMap = {}; // { id: { name: '..', total: 0, buckets: [] } }
+
+    const getBucketIndex = (dateStr) => {
+        const d = new Date(dateStr);
+        if (range === 'custom') {
+            const fromVal = document.getElementById('date-from').value;
+            const toVal = document.getElementById('date-to').value;
+            const [y1, m1, day1] = fromVal.split('-').map(Number);
+            const d1 = new Date(y1, m1 - 1, day1);
+            const d2 = new Date(toVal.split('-')[0], toVal.split('-')[1] - 1, toVal.split('-')[2]);
+            const diffTime = Math.abs(d2 - d1);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+            const bDate = new Date(dateStr); bDate.setHours(0, 0, 0, 0);
+            const dayDiff = Math.round((bDate - d1) / (1000 * 60 * 60 * 24));
+
+            if (diffDays <= 20) return dayDiff;
+            return Math.floor(dayDiff / 5);
+        }
+        if (range === 'today') return d.getHours();
+        if (range === 'week') return (d.getDay() + 6) % 7;
+        if (range === 'month') {
+            let idx = Math.floor((d.getDate() - 1) / 7);
+            return idx > 4 ? 4 : idx;
+        }
+        if (range === 'year') return d.getMonth();
+        return 0;
+    };
+
+    if (!allItems) allItems = [];
+
+    allItems.forEach(item => {
+        if (!productMap[item.product_name]) {
+            productMap[item.product_name] = {
+                name: item.product_name,
+                total: 0,
+                buckets: new Array(itemsLimit).fill(0)
+            };
+        }
+        productMap[item.product_name].total += item.quantity;
+        const idx = getBucketIndex(item.created_at);
+        if (idx >= 0 && idx < itemsLimit) {
+            productMap[item.product_name].buckets[idx] += item.quantity;
+        }
+    });
+
+    // 2. Select Products to Show (Top 5 + Bottom 5)
+    let sortedProducts = Object.values(productMap).sort((a, b) => b.total - a.total);
+
+    const top5 = sortedProducts.slice(0, 5);
+    const bottom5 = sortedProducts.slice(-5).reverse();
+    const combined = new Set([...top5, ...bottom5]);
+    let productsToShow = Array.from(combined);
+
+    // 3. Prepare Datasets
+    const datasets = productsToShow.map((p, i) => {
+        let isBright = true;
+        const isBottom = sortedProducts.slice(-5).includes(p);
+        const isTop = sortedProducts.slice(0, 5).includes(p);
+        if (isBottom && !isTop) isBright = false;
+
+        let running = 0;
+        const cumData = p.buckets.map(v => { running += v; return running; });
+
+        return {
+            label: p.name,
+            data: cumData,
+            borderColor: getChartColor(i, isBright),
+            backgroundColor: getChartColor(i, isBright),
+            tension: 0.3,
+            fill: false,
+            borderWidth: 2,
+            pointRadius: 3
+        };
+    });
+
+    // Render
+    appState.charts.product = new Chart(ctxProd, {
+        type: 'line',
+        data: {
+            labels: appState.charts.revenue.data.labels,
+            datasets: datasets
+        },
+        options: {
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    });
+}
+
+function renderSalesTable(items) {
+    const tbody = document.querySelector('#sales-report-table tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!items || items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;">No data available</td></tr>';
+        return;
+    }
+
+    // Aggregate
+    const counts = {};
+    items.forEach(item => {
+        counts[item.product_name] = (counts[item.product_name] || 0) + item.quantity;
+    });
+
+    // Sort Descending
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+    // Render
+    sorted.forEach(([name, count]) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${name}</td><td>${count}</td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+function filterSalesTable() {
+    const input = document.getElementById('sales-table-search');
+    const filter = input.value.toLowerCase();
+    const table = document.getElementById('sales-report-table');
+    const tr = table.getElementsByTagName('tr');
+
+    for (let i = 1; i < tr.length; i++) { // Skip header
+        const td = tr[i].getElementsByTagName('td')[0];
+        if (td) {
+            const txtValue = td.textContent || td.innerText;
+            if (txtValue.toLowerCase().indexOf(filter) > -1) {
+                tr[i].style.display = "";
+            } else {
+                tr[i].style.display = "none";
+            }
+        }
+    }
+}
+
