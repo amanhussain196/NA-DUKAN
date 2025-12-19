@@ -25,25 +25,35 @@ window.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
+    // Check if Supabase SDK is loaded
+    if (!window.supabase) {
+        alert("Network Error: Could not connect to database services. Please check your internet connection and reload the page.");
+        return;
+    }
+
     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // Initial Load
-    await loadInventory();
-    loadDashboard('today');
+    // Initial Load - Delegated to Auth
+    // await loadInventory();
+    // loadDashboard('today');
 
     // Set default date inputs to today
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('date-from').value = today;
     document.getElementById('date-to').value = today;
 
-    // Set default sales date inputs (last 30 days maybe? or just leave empty for all time? Let's default to today for now)
+    // Set default sales date inputs
     document.getElementById('sales-date-from').value = today;
     document.getElementById('sales-date-to').value = today;
 
+    // Trigger Auth Check
+    if (typeof checkSession === 'function') {
+        checkSession();
+    }
+
     // Load Initial Data
-    await fetchTabs();
-    await fetchProducts();
-    loadDashboard('today');
+    // Duplicate calls removed
 });
 
 // Navigation
@@ -63,6 +73,7 @@ function switchView(viewId) {
     if (viewId === 'inventory') renderInventoryList();
     if (viewId === 'billing') renderBilling();
     if (viewId === 'dashboard') loadDashboard(appState.dashboardFilter);
+    if (viewId === 'analysis') loadDashboard(appState.dashboardFilter);
     if (viewId === 'sales') loadSales();
 }
 
@@ -109,6 +120,7 @@ async function loadSales() {
 
     if (error) {
         console.error('Error loading sales:', error);
+        alert('Failed to load sales history. Check connection.');
         return;
     }
 
@@ -173,7 +185,10 @@ async function loadInventory() {
         .select('*')
         .order('sort_order', { ascending: true });
 
-    if (tabsError) console.error('Error loading tabs:', tabsError);
+    if (tabsError) {
+        console.error('Error loading tabs:', tabsError);
+        alert('Failed to load categories. Please reload.');
+    }
     else appState.tabs = tabs || [];
 
     // Fetch Products
@@ -182,10 +197,12 @@ async function loadInventory() {
         .select('*')
         .order('name', { ascending: true });
 
-    if (prodError) console.error('Error loading products:', prodError);
+    if (prodError) {
+        console.error('Error loading products:', prodError);
+        alert('Failed to load products. Please reload.');
+    }
     else appState.products = products || [];
 
-    renderInventoryTabs();
     renderInventoryTabs();
     renderInventoryList();
 }
@@ -204,10 +221,54 @@ function renderInventoryTabs() {
     appState.tabs.forEach(tab => {
         const pill = document.createElement('div');
         pill.className = `tab-pill ${appState.currentInventoryTab === tab.id ? 'active' : ''}`;
-        pill.textContent = tab.name;
-        pill.onclick = () => { appState.currentInventoryTab = tab.id; renderInventoryTabs(); renderInventoryList(); };
+
+        // Tab Name Span
+        const span = document.createElement('span');
+        span.textContent = tab.name;
+        span.onclick = () => { appState.currentInventoryTab = tab.id; renderInventoryTabs(); renderInventoryList(); };
+        pill.appendChild(span);
+
+        // Delete Button (Small 'x')
+        const delBtn = document.createElement('span');
+        delBtn.innerHTML = '&times;';
+        delBtn.style.marginLeft = '8px';
+        delBtn.style.opacity = '0.7';
+        delBtn.style.cursor = 'pointer';
+        delBtn.onclick = (e) => { e.stopPropagation(); deleteTab(tab.id); };
+        pill.appendChild(delBtn);
+
         container.appendChild(pill);
     });
+}
+
+async function deleteTab(tabId) {
+    if (!confirm('Are you sure you want to delete this category? All products in it will be moved to "All".')) return;
+
+    // 1. Move products to NULL tab (Uncategorized)
+    // Supabase SET tab_id = NULL WHERE tab_id = tabId
+    const { error: moveError } = await supabase
+        .from('products')
+        .update({ tab_id: null })
+        .eq('tab_id', tabId);
+
+    if (moveError) {
+        alert('Error moving products: ' + moveError.message);
+        return;
+    }
+
+    // 2. Delete the tab
+    const { error: delError } = await supabase
+        .from('product_tabs')
+        .delete()
+        .eq('id', tabId);
+
+    if (delError) {
+        alert('Error deleting tab: ' + delError.message);
+    } else {
+        // Reset view if we were on that tab
+        if (appState.currentInventoryTab === tabId) appState.currentInventoryTab = 'all';
+        loadInventory();
+    }
 }
 
 function renderInventoryList() {
@@ -281,7 +342,32 @@ function openAddProductModal() {
 
     modalOverlay.classList.remove('hidden');
     document.getElementById('modal-add-product').classList.remove('hidden');
+
+    // Reset stock visibility
+    toggleStockInput('add', false);
 }
+
+function toggleStockInput(mode, isHidden) {
+    const prefix = mode === 'add' ? 'p' : 'edit-p';
+    const container = document.getElementById(`${prefix}-stock`).closest('.form-group');
+    const input = document.getElementById(`${prefix}-stock`);
+
+    if (isHidden) {
+        container.classList.add('hidden');
+        input.removeAttribute('required');
+    } else {
+        container.classList.remove('hidden');
+        input.setAttribute('required', 'true');
+    }
+}
+
+// Event Listeners for In-House Checkbox
+document.getElementById('p-house').addEventListener('change', (e) => {
+    toggleStockInput('add', e.target.checked);
+});
+document.getElementById('edit-p-house').addEventListener('change', (e) => {
+    toggleStockInput('edit', e.target.checked);
+});
 
 function openEditProduct(productId) {
     const product = appState.products.find(p => p.id === productId);
@@ -292,6 +378,9 @@ function openEditProduct(productId) {
     document.getElementById('edit-p-price').value = product.price;
     document.getElementById('edit-p-stock').value = product.stock;
     document.getElementById('edit-p-house').checked = product.is_in_house;
+
+    // Set initial visibility
+    toggleStockInput('edit', product.is_in_house);
 
     // Populate tab select
     const select = document.getElementById('edit-p-tab');
@@ -329,9 +418,12 @@ document.getElementById('add-product-form').addEventListener('submit', async (e)
     e.preventDefault();
     const name = document.getElementById('p-name').value;
     const price = document.getElementById('p-price').value;
-    const stock = document.getElementById('p-stock').value;
-    const tab_id = document.getElementById('p-tab').value;
     const is_in_house = document.getElementById('p-house').checked;
+    // If in-house, we ignore stock input (it's hidden/empty) and save as 0
+    const stock = is_in_house ? 0 : (document.getElementById('p-stock').value || 0);
+
+    let tab_id = document.getElementById('p-tab').value;
+    if (tab_id === "") tab_id = null; // Handle unselected tab
 
     const { error } = await supabase
         .from('products')
@@ -350,9 +442,12 @@ document.getElementById('edit-product-form').addEventListener('submit', async (e
     const id = document.getElementById('edit-p-id').value;
     const name = document.getElementById('edit-p-name').value;
     const price = document.getElementById('edit-p-price').value;
-    const stock = document.getElementById('edit-p-stock').value;
-    const tab_id = document.getElementById('edit-p-tab').value;
     const is_in_house = document.getElementById('edit-p-house').checked;
+
+    const stock = is_in_house ? 0 : (document.getElementById('edit-p-stock').value || 0);
+
+    let tab_id = document.getElementById('edit-p-tab').value;
+    if (tab_id === "") tab_id = null;
 
     const { error } = await supabase
         .from('products')
@@ -582,18 +677,37 @@ async function generateBill() {
 // ==========================================
 
 // Date filters
+// Date filters
 document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        // UI
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        const range = btn.getAttribute('data-range');
+        const isCustom = btn.id === 'custom-date-btn' || btn.id === 'analysis-custom-date-btn';
+
+        // Update UI for all tabs (Sync)
+        document.querySelectorAll('.filter-btn').forEach(b => {
+            // If we clicked a specific range, activate matching buttons elsewhere
+            if (!isCustom && b.getAttribute('data-range') === range) {
+                b.classList.add('active');
+            }
+            // If we clicked custom, activate custom buttons elsewhere
+            else if (isCustom && (b.id === 'custom-date-btn' || b.id === 'analysis-custom-date-btn')) {
+                b.classList.add('active');
+            }
+            else {
+                b.classList.remove('active');
+            }
+        });
+
+        // Hide all custom inputs first
+        document.getElementById('custom-date-inputs').classList.add('hidden');
+        document.getElementById('analysis-custom-date-inputs').classList.add('hidden');
 
         // Logic
-        if (btn.id === 'custom-date-btn') {
-            document.getElementById('custom-date-inputs').classList.remove('hidden');
+        if (isCustom) {
+            // Show inputs for the specific view we are in, or just the one next to the button
+            if (btn.id === 'custom-date-btn') document.getElementById('custom-date-inputs').classList.remove('hidden');
+            if (btn.id === 'analysis-custom-date-btn') document.getElementById('analysis-custom-date-inputs').classList.remove('hidden');
         } else {
-            document.getElementById('custom-date-inputs').classList.add('hidden');
-            const range = btn.getAttribute('data-range');
             appState.dashboardFilter = range;
             loadDashboard(range);
         }
@@ -616,7 +730,7 @@ function getChartColor(idx, isBright) {
     return dullColors[idx % dullColors.length];
 }
 
-function applyCustomDate() {
+function applyCustomDate(source) {
     appState.dashboardFilter = 'custom';
     loadDashboard('custom');
 }
@@ -642,8 +756,19 @@ async function loadDashboard(range) {
         } else if (range === 'year') {
             startTime = new Date(now.getFullYear(), 0, 1).toISOString();
         } else if (range === 'custom') {
-            const d1 = document.getElementById('date-from').value;
-            const d2 = document.getElementById('date-to').value;
+            let d1 = document.getElementById('date-from').value;
+            let d2 = document.getElementById('date-to').value;
+
+            // Check if we are in analysis view, use those inputs if populated
+            if (!document.getElementById('analysis').classList.contains('hidden')) {
+                const ad1 = document.getElementById('analysis-date-from').value;
+                const ad2 = document.getElementById('analysis-date-to').value;
+                if (ad1 && ad2) {
+                    d1 = ad1;
+                    d2 = ad2;
+                }
+            }
+
             if (!d1 || !d2) return;
 
             query = query.gte('created_at', new Date(d1).toISOString())
@@ -657,6 +782,7 @@ async function loadDashboard(range) {
         const { data: bills, error } = await query;
         if (error) {
             console.error('Error fetching dashboard stats:', error);
+            alert('Failed to load dashboard data. Check connection.');
             return;
         }
 
@@ -687,8 +813,19 @@ async function loadDashboard(range) {
         if (range !== 'custom' && startTime) {
             itemsQuery = itemsQuery.gte('created_at', startTime);
         } else if (range === 'custom') {
-            const d1 = document.getElementById('date-from').value;
-            const d2 = document.getElementById('date-to').value;
+            let d1 = document.getElementById('date-from').value;
+            let d2 = document.getElementById('date-to').value;
+
+            // Check if we are in analysis view, use those inputs if populated
+            if (!document.getElementById('analysis').classList.contains('hidden')) {
+                const ad1 = document.getElementById('analysis-date-from').value;
+                const ad2 = document.getElementById('analysis-date-to').value;
+                if (ad1 && ad2) {
+                    d1 = ad1;
+                    d2 = ad2;
+                }
+            }
+
             if (d1 && d2) {
                 itemsQuery = itemsQuery.gte('created_at', new Date(d1).toISOString())
                     .lte('created_at', new Date(new Date(d2).setHours(23, 59, 59)).toISOString());

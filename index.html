@@ -21,12 +21,108 @@
 </head>
 
 <body>
-    <div class="app-container">
+    <!-- Authentication Section -->
+    <div id="auth-section" class="auth-wrapper">
+        <div class="auth-card">
+            <h1 style="text-align: center; margin-bottom: 1.5rem;">Na <span class="highlight">Dukan</span></h1>
+
+            <!-- Login Form -->
+            <div id="login-view">
+                <h2 class="auth-title">Owner Sign In</h2>
+                <div class="form-group">
+                    <label>Tenant ID</label>
+                    <input type="text" id="login-tenant" placeholder="8-digit ID">
+                </div>
+                <div class="form-group">
+                    <label>Email or Phone</label>
+                    <input type="text" id="login-identifier" placeholder="Email / Phone">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="login-password" placeholder="Password">
+                </div>
+                <button class="auth-btn" onclick="handleLogin()">Sign In</button>
+                <p class="auth-footer">New Owner? <span onclick="showSignup()">Create Account</span></p>
+            </div>
+
+            <!-- Signup Form -->
+            <div id="signup-view" class="hidden">
+                <h2 class="auth-title">Register Business</h2>
+
+                <!-- Step 1: Credentials -->
+                <div id="signup-step-1">
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <input type="email" id="reg-email" placeholder="you@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="reg-pass" placeholder="Create Password">
+                    </div>
+                    <div class="form-group">
+                        <label>Confirm Password</label>
+                        <input type="password" id="reg-confirm" placeholder="Repeat Password">
+                    </div>
+                    <button class="auth-btn" onclick="initiateSignup()">Verify & Continue</button>
+                </div>
+
+                <!-- Step 2: OTP Verification -->
+                <div id="signup-step-otp" class="hidden">
+                    <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                        We sent a code to your email.
+                    </p>
+                    <div class="form-group">
+                        <label>Email OTP</label>
+                        <input type="text" id="otp-user" placeholder="Enter Code">
+                    </div>
+
+                    <div class="dev-otp-section"
+                        style="margin: 1rem 0; padding: 1rem; background: #FFFBEB; border-radius: 8px;">
+                        <label style="display:block; margin-bottom:0.5rem; font-size:0.9rem; font-weight:600;">Developer
+                            Authorization</label>
+                        <button class="action-btn small" onclick="requestDevOtp()" style="margin-bottom:0.5rem;">Send
+                            Dev OTP</button>
+                        <input type="text" id="otp-dev" placeholder="Enter Dev Code">
+                    </div>
+
+                    <button class="auth-btn" onclick="verifyOtps()">Validate Codes</button>
+                </div>
+
+                <!-- Step 3: Business Details -->
+                <div id="signup-step-details" class="hidden">
+                    <div class="form-group">
+                        <input type="text" id="reg-fullname" placeholder="Full Name">
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="reg-phone" placeholder="Phone Number">
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="reg-business" placeholder="Business Name">
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="reg-address" placeholder="Full Address">
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="reg-pincode" placeholder="Pincode">
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="reg-plan" placeholder="Plan (e.g. Pro)">
+                    </div>
+                    <button class="auth-btn success" onclick="finalizeSignup()">Complete Registration</button>
+                </div>
+
+                <p class="auth-footer">Existing Owner? <span onclick="showLogin()">Sign In</span></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-app" class="app-container hidden">
         <!-- Navigation -->
         <nav class="navbar">
             <div class="logo">Na <span class="highlight">Dukan</span></div>
             <div class="nav-links">
                 <button class="nav-btn active" onclick="switchView('dashboard')">Dashboard</button>
+                <button class="nav-btn" onclick="switchView('analysis')">Data Analysis</button>
                 <button class="nav-btn" onclick="switchView('billing')">Billing</button>
                 <button class="nav-btn" onclick="switchView('sales')">Sales</button>
                 <button class="nav-btn" onclick="switchView('inventory')">Inventory</button>
@@ -81,88 +177,103 @@
                 </div>
 
                 <!-- Data Analysis Section -->
-                <div class="collapsible-header"
-                    onclick="document.getElementById('data-analysis-content').classList.toggle('hidden'); this.querySelector('.toggle-icon').textContent = document.getElementById('data-analysis-content').classList.contains('hidden') ? '▶' : '▼';">
-                    <h2 style="font-size: 1.25rem; margin:0;">Data Analysis</h2>
-                    <span class="toggle-icon">▼</span>
-                </div>
-
-                <div id="data-analysis-content" class="collapsible-content">
-                    <div class="analysis-grid">
-                        <!-- Row 1: Revenue Velocity & Trend -->
-                        <div class="chart-container">
-                            <h3>Revenue Velocity</h3>
-                            <div class="chart-wrapper">
-                                <canvas id="chart-velocity"></canvas>
-                            </div>
-                        </div>
-                        <div class="chart-container">
-                            <h3>Revenue Trend</h3>
-                            <div class="chart-wrapper">
-                                <canvas id="chart-revenue"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Row 2: Bill Velocity & Trend -->
-                        <div class="chart-container">
-                            <h3>Bill Velocity</h3>
-                            <div class="chart-wrapper">
-                                <canvas id="chart-bill-velocity"></canvas>
-                            </div>
-                        </div>
-                        <div class="chart-container">
-                            <h3>Bills Trend</h3>
-                            <div class="chart-wrapper">
-                                <canvas id="chart-bills"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Row 3: Product Sales Trend -->
-                        <div class="chart-container full-width" style="height: 400px;">
-                            <h3>Product Sales Trend</h3>
-                            <div class="chart-wrapper">
-                                <canvas id="chart-product"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Row 4: Payment Mode Distribution -->
-                        <div class="chart-container full-width">
-                            <h3>Payment Mode Distribution</h3>
-                            <div class="chart-wrapper">
-                                <canvas id="chart-payment"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Row 5: Product Sales Table -->
-                        <div class="chart-container full-width" style="height: auto;">
-                            <div
-                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                <h3>Detailed Sales Report</h3>
-                                <input type="text" id="sales-table-search" placeholder="Search..."
-                                    onkeyup="filterSalesTable()"
-                                    style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 6px;">
-                            </div>
-                            <div class="table-container" style="max-height: 400px; overflow-y: auto;">
-                                <table class="data-table" id="sales-report-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Product Name</th>
-                                            <th>Sales Count</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <!-- Injected via JS -->
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Data Analysis moved to separate tab -->
 
                 <div class="dashboard-section" style="margin-top: 2rem;">
                     <h2 style="font-size: 1.1rem; margin-bottom: 1rem;">Top Selling Products</h2>
                     <div class="top-products-list" id="top-products-list">
                         <!-- Injected via JS -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Data Analysis View -->
+        <section id="analysis" class="view hidden">
+            <header class="view-header">
+                <h1>Data Analysis</h1>
+                <div class="filters">
+                    <button class="filter-btn active" data-range="today">Today</button>
+                    <button class="filter-btn" data-range="week">This Week</button>
+                    <button class="filter-btn" data-range="month">This Month</button>
+                    <button class="filter-btn" data-range="year">This Year</button>
+                    <button class="filter-btn" id="analysis-custom-date-btn">Custom</button>
+                    <div id="analysis-custom-date-inputs" class="hidden">
+                        <input type="date" id="analysis-date-from">
+                        <input type="date" id="analysis-date-to">
+                        <button class="action-btn small" onclick="applyCustomDate('analysis')">Go</button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="dashboard-scroll-container">
+                <div class="analysis-grid">
+                    <!-- Row 1: Revenue Velocity & Trend -->
+                    <div class="chart-container">
+                        <h3>Revenue Velocity</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="chart-velocity"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Revenue Trend</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="chart-revenue"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Bill Velocity & Trend -->
+                    <div class="chart-container">
+                        <h3>Bill Velocity</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="chart-bill-velocity"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Bills Trend</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="chart-bills"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Product Sales Trend -->
+                    <div class="chart-container full-width" style="height: 400px;">
+                        <h3>Product Sales Trend</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="chart-product"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Row 4: Payment Mode Distribution -->
+                    <div class="chart-container full-width">
+                        <h3>Payment Mode Distribution</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="chart-payment"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Row 5: Product Sales Table -->
+                    <div class="chart-container full-width" style="height: auto;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <h3>Detailed Sales Report</h3>
+                            <input type="text" id="sales-table-search" placeholder="Search..."
+                                onkeyup="filterSalesTable()"
+                                style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 6px;">
+                        </div>
+                        <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                            <table class="data-table" id="sales-report-table">
+                                <thead>
+                                    <tr>
+                                        <th>Product Name</th>
+                                        <th>Sales Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Injected via JS -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -374,6 +485,7 @@
         </div>
     </div>
 
+    <script src="auth.js"></script>
     <script src="app.js"></script>
 </body>
 
