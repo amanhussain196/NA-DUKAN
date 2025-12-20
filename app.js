@@ -1,10 +1,5 @@
-// CONFIGURATION
-// Replace these with your project details from Supabase Dashboard -> Project Settings -> API
-const SUPABASE_URL = 'https://frmyusjvjbqzenlnvfsf.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZybXl1c2p2amJxemVubG52ZnNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNTg2MDEsImV4cCI6MjA4MTYzNDYwMX0.RtHPFhYDTnj8q-6QYVNgeOiA_ZhzKRiVPtvBkdtKUbE';
-
 // State
-let supabase = null;
+// supabase is initialized in config.js
 let appState = {
     tabs: [],
     products: [],
@@ -12,26 +7,19 @@ let appState = {
     currentBillingTab: 'all',
     currentInventoryTab: 'all',
     dashboardFilter: 'today',
-    dashboardFilter: 'today',
     charts: { payment: null, revenue: null, bills: null, velocity: null, billVelocity: null, product: null },
     dashboardData: null // Cache for bills, items, etc.
 };
+window.appState = appState;
 
 // Intialize
 window.addEventListener('DOMContentLoaded', async () => {
-    if (SUPABASE_URL === 'YOUR_SUPABASE_URL_HERE' || SUPABASE_KEY === 'YOUR_SUPABASE_ANON_KEY_HERE') {
-        document.getElementById('config-warning').classList.remove('hidden');
-        console.error("Supabase not configured.");
+    if (!supabase) {
+        console.error("Supabase client missing");
         return;
     }
 
-    // Check if Supabase SDK is loaded
-    if (!window.supabase) {
-        alert("Network Error: Could not connect to database services. Please check your internet connection and reload the page.");
-        return;
-    }
-
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // Initial Load
 
     // Initial Load
     // Initial Load - Delegated to Auth
@@ -75,6 +63,7 @@ function switchView(viewId) {
     if (viewId === 'dashboard') loadDashboard(appState.dashboardFilter);
     if (viewId === 'analysis') loadDashboard(appState.dashboardFilter);
     if (viewId === 'sales') loadSales();
+    if (viewId === 'settings') loadSettings();
 }
 
 // ==========================================
@@ -803,12 +792,9 @@ async function loadDashboard(range) {
         document.getElementById('stat-bill-count').textContent = count;
 
         // --- Render Charts ---
-        // Update chart IDs just for safety if logic was wrong
-        // --- Render Charts (Moved below to wait for items) ---
-
-
-        // --- Top Products Logic ---
+        // Top Products Logic
         let itemsQuery = supabase.from('bill_items').select('product_name, quantity, price, created_at');
+
 
         if (range !== 'custom' && startTime) {
             itemsQuery = itemsQuery.gte('created_at', startTime);
@@ -1661,6 +1647,409 @@ function filterSalesTable() {
                 tr[i].style.display = "none";
             }
         }
+    }
+}
+
+// ==========================================
+// SETTINGS
+// ==========================================
+
+async function loadSettings() {
+    console.log("Loading Settings...");
+    // 1. Get User Data
+    let user = authState.owner;
+
+    // Fallback
+    if (!user) {
+        const stored = localStorage.getItem('tenant_session');
+        if (stored) {
+            try {
+                user = JSON.parse(stored);
+            } catch (e) { console.error(e); }
+        }
+    }
+
+    if (!user) {
+        console.warn("No user found in session.");
+        return;
+    }
+
+    // --- PERMISSION CHECK: Inventory & Analysis ---
+    const navButtons = document.querySelectorAll('.nav-btn');
+    let invBtn = null, analysisBtn = null;
+    navButtons.forEach(btn => {
+        if (btn.textContent.includes('Inventory')) invBtn = btn;
+        if (btn.textContent.includes('Data Analysis')) analysisBtn = btn;
+    });
+
+    let allowAnalysis = false;
+
+    // 2. Populate Fields & Resolve Permissions
+
+    // Profile Data Source: Default to User
+    let pNameVal = user.full_name;
+    let pEmailVal = user.email;
+
+    if (user.role === 'employee') {
+        // Hide Inventory for Employee
+        if (invBtn) invBtn.style.display = 'none';
+
+        // Fetch Owner Details AND Preferences
+        const { data: ownerReq } = await supabase
+            .from('owners')
+            .select('*')
+            .eq('tenant_id', user.tenant_id)
+            .eq('role', 'owner')
+            .maybeSingle();
+
+        if (ownerReq) {
+            pNameVal = ownerReq.full_name + " (Owner)";
+            pEmailVal = ownerReq.email;
+            if (ownerReq.allow_employee_analysis) allowAnalysis = true;
+
+            // Cache owner's store name for branding
+            if (ownerReq.preferred_store_name) {
+                appState.ownerPreferredName = ownerReq.preferred_store_name;
+            } else {
+                appState.ownerPreferredName = ownerReq.business_name || "Na Dukan";
+            }
+        }
+        updateBranding(); // Update UI immediately
+
+        // Hide Analysis if not allowed
+        if (analysisBtn) {
+            analysisBtn.style.display = allowAnalysis ? 'inline-block' : 'none';
+        }
+
+        // Hide Pref Card
+        document.getElementById('settings-preferences-card').classList.add('hidden');
+
+    } else {
+        // Owner
+        if (invBtn) invBtn.style.display = 'inline-block';
+        if (analysisBtn) analysisBtn.style.display = 'inline-block';
+
+        // Show Pref Card
+        const prefCard = document.getElementById('settings-preferences-card');
+        prefCard.classList.remove('hidden');
+
+        // PREF: Store Name
+        const nameInput = document.getElementById('pref-store-name');
+        const saveNameBtn = document.getElementById('btn-save-pref-name');
+
+        if (nameInput) {
+            nameInput.value = user.preferred_store_name || user.business_name || '';
+
+            saveNameBtn.onclick = async () => {
+                const newName = nameInput.value.trim();
+                if (!newName) return;
+
+                const { error } = await supabase
+                    .from('owners')
+                    .update({ preferred_store_name: newName })
+                    .eq('id', user.id);
+
+                if (error) {
+                    console.error("Save Error", error);
+                    alert("Failed to save name.");
+                } else {
+                    alert("Store Name Updated!");
+                    // Update Local State
+                    authState.owner.preferred_store_name = newName;
+                    updateBranding();
+                }
+            };
+        }
+
+        // PREF: Analysis Checkbox
+        const prefCheck = document.getElementById('pref-employee-analysis');
+        if (prefCheck) {
+            prefCheck.checked = user.allow_employee_analysis === true;
+
+            // Attach Listener (deduplicated via property or just re-assign onclick)
+            prefCheck.onclick = async (e) => {
+                const checked = e.target.checked;
+                // Update DB
+                const { error } = await supabase
+                    .from('owners')
+                    .update({ allow_employee_analysis: checked })
+                    .eq('id', user.id);
+
+                if (error) {
+                    console.error("Error updating pref", error);
+                    alert("Failed to save preference");
+                    e.target.checked = !checked; // Undo
+                } else {
+                    // Update local state temporarily
+                    authState.owner.allow_employee_analysis = checked;
+                }
+            };
+        }
+    }
+
+    // Profile
+    const pName = document.getElementById('settings-p-name');
+    const pEmail = document.getElementById('settings-p-email');
+    if (pName) pName.value = pNameVal || '';
+    if (pEmail) pEmail.value = pEmailVal || '';
+
+    // Shop
+    const sName = document.getElementById('settings-s-name');
+    const sAddr = document.getElementById('settings-s-addr');
+    if (sName) sName.value = user.business_name || '';
+    if (sAddr) sAddr.value = (user.address || '') + (user.pincode ? `, ${user.pincode}` : '');
+
+    // Employee List
+    if (user.role === 'employee') {
+        // Hide Add Employee Button if current user is employee
+        const addEmpBtn = document.getElementById('btn-add-employee');
+        if (addEmpBtn) addEmpBtn.classList.add('hidden');
+    } else {
+        // Ensure visible if owner
+        const addEmpBtn = document.getElementById('btn-add-employee');
+        if (addEmpBtn) addEmpBtn.classList.remove('hidden');
+    }
+
+    loadEmployeeList(user.tenant_id);
+}
+
+window.updateBranding = function () {
+    const brandEl = document.getElementById('nav-brand-name');
+    if (!brandEl) return;
+
+    let name = "Na Dukan"; // Default fallback
+
+    // Check owner pref
+    // If owner logged in
+    if (authState.owner) {
+        if (authState.owner.preferred_store_name) {
+            name = authState.owner.preferred_store_name;
+        } else if (authState.owner.business_name) {
+            name = authState.owner.business_name;
+        }
+    }
+
+    // If we have cached one (e.g. employee view)
+    if (appState.ownerPreferredName) {
+        name = appState.ownerPreferredName;
+    }
+
+    // If still just "Na Dukan", apply basic styling. 
+    // If custom, just text.
+    if (name === "Na Dukan") {
+        brandEl.innerHTML = `Na <span class="highlight">Dukan</span>`;
+    } else {
+        brandEl.textContent = name;
+    }
+}
+
+// ==========================================
+// EMPLOYEE MANAGEMENT
+// ==========================================
+
+async function loadEmployeeList(tenantId) {
+    const listContainer = document.getElementById('employee-list-container');
+    if (!listContainer) return;
+
+    if (!tenantId) return;
+
+    const { data: employees, error } = await supabase
+        .from('owners')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('role', 'employee');
+
+    if (error) {
+        console.error("Error loading employees", error);
+        return;
+    }
+
+    if (!employees || employees.length === 0) {
+        listContainer.innerHTML = '<p style="color:var(--text-secondary); font-size:0.9rem;">No employees added yet.</p>';
+        return;
+    }
+
+    let html = '<div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;">';
+    employees.forEach(emp => {
+        let deleteBtn = '';
+        // Only Owners can see delete button
+        if (authState.owner && authState.owner.role === 'owner') {
+            deleteBtn = `
+                <button onclick="deleteEmployee('${emp.id}')" style="background:#FEE2E2; color:#EF4444; border:none; border-radius:4px; padding:0.4rem 0.6rem; cursor:pointer;" title="Remove Employee">
+                   🗑️
+                </button>
+             `;
+        }
+
+        html += `
+            <div style="background:#f9fafb; padding:0.75rem; border-radius:8px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-weight:500;">${emp.full_name || 'Staff'}</div>
+                    <div style="font-size:0.8rem; color:var(--text-secondary);">${emp.email}</div>
+                </div>
+                ${deleteBtn}
+            </div>
+        `;
+    });
+    html += '</div>';
+    listContainer.innerHTML = html;
+}
+
+window.deleteEmployee = async function (id) {
+    if (!confirm("Are you sure you want to remove this employee? They will no longer be able to log in to this shop.")) {
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('owners')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error("Delete Error:", error);
+            alert("Failed to delete employee: " + error.message);
+        } else {
+            alert("Employee removed.");
+            loadSettings(); // Refresh list
+        }
+    } catch (e) {
+        console.error("Unexpected error:", e);
+        alert("Error: " + e.message);
+    }
+}
+
+window.openAddEmployeeModal = async function () {
+    console.log("Opening Add Employee Modal...");
+    try {
+        if (!window.authState || !window.authState.owner) {
+            alert("Session Error: You must be logged in.");
+            return;
+        }
+
+        // 1. Check Limit
+        const { count, error } = await supabase
+            .from('owners')
+            .select('*', { count: 'exact', head: true })
+            .eq('tenant_id', authState.owner.tenant_id)
+            .eq('role', 'employee');
+
+        if (error) {
+            console.error("Error checking limit", error);
+            alert("System error checking employee limit.");
+            return;
+        }
+
+        if (count >= 2) {
+            alert("Limit Reached: You can only add up to 2 employees.");
+            return;
+        }
+
+        const overlay = document.getElementById('modal-overlay');
+        const modal = document.getElementById('modal-add-employee');
+        if (overlay && modal) {
+            overlay.classList.remove('hidden');
+            modal.classList.remove('hidden');
+        } else {
+            console.error("Modal elements not found");
+        }
+    } catch (e) {
+        console.error("Error opening modal:", e);
+        alert("Unexpected error: " + e.message);
+    }
+}
+
+// Ensure the form listener is attached
+// We use a small check to avoid duplicate listeners if this file is hot-reloaded or run multiple times
+if (!window.hasEmployeeListener) {
+    window.hasEmployeeListener = true;
+    const empForm = document.getElementById('add-employee-form');
+    if (empForm) {
+        empForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('emp-name').value.trim();
+            const email = document.getElementById('emp-email').value.trim();
+            const pass = document.getElementById('emp-pass').value;
+            const confirm = document.getElementById('emp-confirm').value;
+
+            if (pass !== confirm) {
+                alert("Passwords do not match!");
+                return;
+            }
+
+            // 2. Check if Email Exists (Public Lookup)
+            const { data: existing } = await supabase
+                .from('owners')
+                .select('id')
+                .eq('email', email)
+                .maybeSingle();
+
+            if (existing) {
+                alert("This email is already registered.");
+                return;
+            }
+
+            // 3. Create User (Using Temp Client)
+            // We create a fresh client instance that doesn't persist session to localStorage 
+            // so it doesn't log out the current owner.
+            if (!window.SupabaseFactory) {
+                alert("Configuration Error: Supabase Factory not found. Please reload.");
+                return;
+            }
+            const tempSupabase = window.SupabaseFactory.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth: {
+                    storage: null, // Don't save to localStorage
+                    persistSession: false,
+                    autoRefreshToken: false,
+                    detectSessionInUrl: false
+                }
+            });
+
+            const { data: authData, error: authError } = await tempSupabase.auth.signUp({
+                email: email,
+                password: pass,
+                options: {
+                    data: { full_name: name } // Optional metadata
+                }
+            });
+
+            if (authError) {
+                alert("Error creating login: " + authError.message);
+                return;
+            }
+
+            if (!authData.user) {
+                alert("Unknown error: User not created.");
+                return;
+            }
+
+            // 4. Link to Tenant (Insert into owners)
+            const newOwnerRecord = {
+                id: authData.user.id,
+                tenant_id: authState.owner.tenant_id,
+                email: email,
+                full_name: name,
+                role: 'employee',
+                business_name: authState.owner.business_name,
+                address: authState.owner.address,
+                pincode: authState.owner.pincode,
+                plan: authState.owner.plan,
+                created_at: new Date().toISOString()
+            };
+
+            const { error: dbError } = await supabase
+                .from('owners')
+                .insert([newOwnerRecord]);
+
+            if (dbError) {
+                console.error("DB Error", dbError);
+                alert("Account created but failed to link to shop. Please contact support.");
+            } else {
+                alert("Employee Added Successfully!");
+                closeModals();
+                loadSettings(); // Refresh list
+            }
+        });
     }
 }
 

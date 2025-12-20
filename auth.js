@@ -1,5 +1,5 @@
 // Auth State
-let authState = {
+var authState = {
     user: null,
     owner: null,
     signup: {
@@ -12,6 +12,7 @@ let authState = {
         devVerified: false
     }
 };
+window.authState = authState;
 
 // ==========================================
 // AUTHENTICATION LOGIC
@@ -47,10 +48,52 @@ function showAuth() {
     document.getElementById('main-app').classList.add('hidden');
 }
 
-function showApp() {
+async function showApp() {
     document.getElementById('auth-section').classList.add('hidden');
     document.getElementById('main-app').classList.remove('hidden');
+
+    // Permission Check
+    if (authState.owner) {
+        // Nav Buttons
+        const navButtons = document.querySelectorAll('.nav-btn');
+        let invBtn = null, analysisBtn = null;
+        navButtons.forEach(btn => {
+            if (btn.textContent.includes('Inventory')) invBtn = btn;
+            if (btn.textContent.includes('Data Analysis')) analysisBtn = btn;
+        });
+
+        if (authState.owner.role === 'employee') {
+            // Hide Inventory
+            if (invBtn) invBtn.style.display = 'none';
+
+            // Check Analysis Permission (Fetch Owner Config)
+            const { data: ownerReq } = await supabase
+                .from('owners')
+                .select('allow_employee_analysis, preferred_store_name, business_name')
+                .eq('tenant_id', authState.owner.tenant_id)
+                .eq('role', 'owner')
+                .maybeSingle();
+
+            let allowAnalysis = false;
+            if (ownerReq) {
+                if (ownerReq.allow_employee_analysis) allowAnalysis = true;
+                // Cache Branding
+                if (window.appState) {
+                    window.appState.ownerPreferredName = ownerReq.preferred_store_name || ownerReq.business_name || "Na Dukan";
+                }
+            }
+
+            if (analysisBtn) analysisBtn.style.display = allowAnalysis ? 'inline-block' : 'none';
+
+        } else {
+            // Owner: Show All
+            if (invBtn) invBtn.style.display = 'inline-block';
+            if (analysisBtn) analysisBtn.style.display = 'inline-block';
+        }
+    }
+
     // Load data
+    if (window.updateBranding) window.updateBranding();
     loadInventory();
     loadDashboard('today');
 }
@@ -68,57 +111,80 @@ function showLogin() {
 
 // LOGIN
 async function handleLogin() {
-    const tenantId = document.getElementById('login-tenant').value.trim();
-    const identifier = document.getElementById('login-identifier').value.trim(); // Email or Phone
-    const password = document.getElementById('login-password').value;
+    console.log("handleLogin triggered");
 
-    if (!tenantId || !identifier || !password) {
-        alert("Please enter Tenant ID, Email/Phone and Password");
+    if (!window.supabase) {
+        alert("System Error: Database connection not initialized. Please refresh.");
         return;
     }
 
-    // 1. Lookup Tenant
-    // Since we can't search by phone easily without backend function masking, 
-    // we'll assume identifier is Email for Supabase Auth, OR we look up email from 'owners' table using Tenant ID.
+    try {
+        const identifier = document.getElementById('login-identifier').value.trim(); // Email or Phone
+        const password = document.getElementById('login-password').value;
 
-    // Step A: Find owner by Tenant ID
-    const { data: owner, error } = await supabase
-        .from('owners')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .single();
+        if (!identifier || !password) {
+            alert("Please enter Email/Phone and Password");
+            return;
+        }
 
-    if (error || !owner) {
-        alert("Invalid Tenant ID");
-        return;
+        let emailToLogin = identifier;
+
+        // Check if input is likely a phone number (no @ symbol)
+        if (!identifier.includes('@')) {
+            console.log("Looking up phone:", identifier);
+            // Lookup email using phone number
+            const { data: owner, error } = await supabase
+                .from('owners')
+                .select('email')
+                .eq('phone', identifier)
+                .maybeSingle();
+
+            if (error) {
+                console.error("Phone lookup error:", error);
+                alert("Error searching for phone number: " + error.message);
+                return;
+            }
+            if (!owner) {
+                alert("Phone number not found.");
+                return;
+            }
+            emailToLogin = owner.email;
+        }
+
+        console.log("Authenticating as:", emailToLogin);
+
+        // Step C: Authenticate with Supabase (Email + Password)
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email: emailToLogin,
+            password: password
+        });
+
+        if (authError) {
+            console.error("Auth failed:", authError);
+            alert("Login Failed: " + authError.message);
+            return;
+        }
+
+        // Success - Fetch Owner Profile
+        const { data: ownerProfile, error: profileError } = await supabase
+            .from('owners')
+            .select('*')
+            .eq('id', authData.user.id)
+            .single();
+
+        if (profileError || !ownerProfile) {
+            console.error("Profile Fetch Error:", profileError);
+            alert("Login successful but failed to load profile data.");
+            return;
+        }
+
+        localStorage.setItem('tenant_session', JSON.stringify(ownerProfile));
+        authState.owner = ownerProfile;
+        showApp();
+    } catch (err) {
+        console.error("Unexpected Logic Error:", err);
+        alert("An unexpected error occurred: " + err.message);
     }
-
-    // Step B: Verify Identifier matches (Email or Phone)
-    // Note: 'identifier' could be phone. Owner record has 'phone'.
-    let validIdentity = false;
-    if (owner.email.toLowerCase() === identifier.toLowerCase()) validIdentity = true;
-    if (owner.phone && owner.phone === identifier) validIdentity = true;
-
-    if (!validIdentity) {
-        alert("Email/Phone does not match this Tenant ID");
-        return;
-    }
-
-    // Step C: Authenticate with Supabase (Email + Password)
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: owner.email,
-        password: password
-    });
-
-    if (authError) {
-        alert("Login Failed: " + authError.message);
-        return;
-    }
-
-    // Success
-    localStorage.setItem('tenant_session', JSON.stringify(owner));
-    authState.owner = owner;
-    showApp();
 }
 
 // SIGNUP FLOW
@@ -275,7 +341,7 @@ async function finalizeSignup() {
     localStorage.removeItem('mock_dev_otp');
     showLogin();
     // Pre-fill tenant id
-    document.getElementById('login-tenant').value = tenantId;
+
 }
 
 function generateTenantId() {
