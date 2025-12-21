@@ -80,7 +80,7 @@ async function loadSales() {
     const dateTo = document.getElementById('sales-date-to').value;
     const searchBill = document.getElementById('sales-search-bill').value;
 
-    let query = supabase.from('bills').select('*');
+    let query = supabase.from('bills').select('*').eq('tenant_id', authState.owner.tenant_id);
 
     // Apply Filters
     if (payMode !== 'all') {
@@ -172,6 +172,7 @@ async function loadInventory() {
     const { data: tabs, error: tabsError } = await supabase
         .from('product_tabs')
         .select('*')
+        .eq('tenant_id', authState.owner.tenant_id)
         .order('sort_order', { ascending: true });
 
     if (tabsError) {
@@ -184,6 +185,7 @@ async function loadInventory() {
     const { data: products, error: prodError } = await supabase
         .from('products')
         .select('*')
+        .eq('tenant_id', authState.owner.tenant_id)
         .order('name', { ascending: true });
 
     if (prodError) {
@@ -238,7 +240,8 @@ async function deleteTab(tabId) {
     const { error: moveError } = await supabase
         .from('products')
         .update({ tab_id: null })
-        .eq('tab_id', tabId);
+        .eq('tab_id', tabId)
+        .eq('tenant_id', authState.owner.tenant_id);
 
     if (moveError) {
         alert('Error moving products: ' + moveError.message);
@@ -249,7 +252,8 @@ async function deleteTab(tabId) {
     const { error: delError } = await supabase
         .from('product_tabs')
         .delete()
-        .eq('id', tabId);
+        .eq('id', tabId)
+        .eq('tenant_id', authState.owner.tenant_id);
 
     if (delError) {
         alert('Error deleting tab: ' + delError.message);
@@ -296,7 +300,7 @@ function renderInventoryList() {
 async function deleteProduct(id) {
     if (!confirm('Are you sure you want to delete this product?')) return;
 
-    const { error } = await supabase.from('products').delete().eq('id', id);
+    const { error } = await supabase.from('products').delete().eq('id', id).eq('tenant_id', authState.owner.tenant_id);
     if (error) alert('Error deleting product');
     else loadInventory();
 }
@@ -393,7 +397,7 @@ document.getElementById('add-tab-form').addEventListener('submit', async (e) => 
 
     const { data, error } = await supabase
         .from('product_tabs')
-        .insert([{ name, sort_order: appState.tabs.length }]);
+        .insert([{ name, sort_order: appState.tabs.length, tenant_id: authState.owner.tenant_id }]);
 
     if (error) alert('Error creating tab');
     else {
@@ -416,7 +420,7 @@ document.getElementById('add-product-form').addEventListener('submit', async (e)
 
     const { error } = await supabase
         .from('products')
-        .insert([{ name, price, stock, tab_id, is_in_house }]);
+        .insert([{ name, price, stock, tab_id, is_in_house, tenant_id: authState.owner.tenant_id }]);
 
     if (error) alert('Error creating product');
     else {
@@ -441,7 +445,8 @@ document.getElementById('edit-product-form').addEventListener('submit', async (e
     const { error } = await supabase
         .from('products')
         .update({ name, price, stock, tab_id, is_in_house })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('tenant_id', authState.owner.tenant_id);
 
     if (error) alert('Error updating product');
     else {
@@ -615,7 +620,8 @@ async function generateBill() {
             discount_type: discountType,
             discount_value: discountValue,
             final_amount: final,
-            payment_mode: paymentMode
+            payment_mode: paymentMode,
+            tenant_id: authState.owner.tenant_id
         }])
         .select()
         .single();
@@ -633,7 +639,8 @@ async function generateBill() {
         product_id: item.product.id,
         product_name: item.product.name,
         quantity: item.qty,
-        price: item.product.price
+        price: item.product.price,
+        tenant_id: authState.owner.tenant_id
     }));
 
     const { error: itemsError } = await supabase.from('bill_items').insert(itemsToInsert);
@@ -728,7 +735,7 @@ async function loadDashboard(range) {
     if (!supabase) return;
 
     try {
-        let query = supabase.from('bills').select('final_amount, payment_mode, created_at, id');
+        let query = supabase.from('bills').select('final_amount, payment_mode, created_at, id').eq('tenant_id', authState.owner.tenant_id);
 
         const now = new Date();
         let startTime;
@@ -793,7 +800,7 @@ async function loadDashboard(range) {
 
         // --- Render Charts ---
         // Top Products Logic
-        let itemsQuery = supabase.from('bill_items').select('product_name, quantity, price, created_at');
+        let itemsQuery = supabase.from('bill_items').select('product_name, quantity, price, created_at').eq('tenant_id', authState.owner.tenant_id);
 
 
         if (range !== 'custom' && startTime) {
@@ -1756,6 +1763,7 @@ async function loadSettings() {
                     alert("Store Name Updated!");
                     // Update Local State
                     authState.owner.preferred_store_name = newName;
+                    localStorage.setItem('tenant_session', JSON.stringify(authState.owner));
                     updateBranding();
                 }
             };
@@ -1782,6 +1790,7 @@ async function loadSettings() {
                 } else {
                     // Update local state temporarily
                     authState.owner.allow_employee_analysis = checked;
+                    localStorage.setItem('tenant_session', JSON.stringify(authState.owner));
                 }
             };
         }
