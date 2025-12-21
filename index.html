@@ -408,6 +408,155 @@
         </section>
 
         <!-- Settings View -->
+        <section id="settings" class="view hidden">
+            <header class="view-header">
+                <h1>Settings</h1>
+            </header>
+
+            <div class="dashboard-scroll-container">
+                <div class="settings-grid"
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                    <!-- Profile Section -->
+                    <div class="settings-card"
+                        style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div
+                                style="width: 50px; height: 50px; background: #EEF2FF; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--primary-color); font-size: 1.5rem;">
+                                👤</div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">Profile</h3>
+                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">Manage account
+                                    info
+                                </p>
+                            </div>
+                        </div>
+                        <!-- Placeholder Content -->
+                        <div class="form-group">
+                            <label>Owner Name</label>
+                            <input type="text" value="Loading..." id="settings-p-name" disabled
+                                style="background: #f9fafb;">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="text" value="Loading..." id="settings-p-email" disabled
+                                style="background: #f9fafb;">
+                        </div>
+                    </div>
+
+                    <!-- Shop Details Section -->
+                    <div class="settings-card"
+                        style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div
+                                style="width: 50px; height: 50px; background: #FEF3C7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #D97706; font-size: 1.5rem;">
+                                🏪</div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">Shop Details</h3>
+                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">Business
+                                    information
+                                </p>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Business Name</label>
+                            <input type="text" value="Loading..." id="settings-s-name" disabled
+                                style="background: #f9fafb;">
+                        </div>
+                        <div class="form-group">
+                            <label>Address</label>
+                            <input type="text" value="Loading..." id="settings-s-addr" disabled
+                                style="background: #f9fafb;">
+                        </div>
+                    </div>
+
+                    <!-- Preferences Section (Owner Only) -->
+                    <div id="settings-preferences-card" class="settings-card hidden"
+                        style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div
+                                style="width: 50px; height: 50px; background: #F3E8FF; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #9333EA; font-size: 1.5rem;">
+                                ⚙️</div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">Preferences</h3>
+                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">Control app
+                                    behavior
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 1.5rem;">
+                            <label>Preferred Store Name</label>
+                            <input type="text" id="pref-store-name" placeholder="Na Dukan"
+                                style="width: 100%; margin-bottom: 0.5rem;">
+                            <div style="text-align: right;">
+                                <button id="btn-save-pref-name" class="action-btn"
+                                    style="width: auto; padding: 0.4rem 1rem; font-size: 0.9rem;">Save Name</button>
+                            </div>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.3rem;">Displayed at
+                                the
+                                top of the app.</p>
+                        </div>
+
+                        <div
+                            style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                            <div>
+                                <label style="font-weight: 500; display: block; margin-bottom: 0.2rem;">Employee
+                                    Analysis</label>
+                                <span style="font-size: 0.8rem; color: var(--text-secondary);">Allow staff to see Data
+                                    Analysis tab</span>
+                            </div>
+                            <div class="checkbox">
+                                <input type="checkbox" id="pref-employee-analysis"
+                                    style="width: 1.2rem; height: 1.2rem;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Employee Section -->
+                    <div class="settings-card"
+                        style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <div
+                                style="width: 50px; height: 50px; background: #ECFDF5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #D97706; font-size: 1.5rem;">
+                                👥</div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">Employees</h3>
+                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">Manage staff
+                                    access
+                                </p>
+                            </div>
+                        </div>
+                        <div id="employee-list-container" style="padding: 0.5rem 0;">
+                            <!-- List injected via JS -->
+                            <div style="text-align: center; color: var(--text-secondary); padding: 1rem;">Loading...
+                            </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 1rem;">
+                            <button id="btn-add-employee" class="action-btn primary" onclick="openAddEmployeeModal()">+
+                                Add
+                                Employee</button>
+                        </div>
+                    </div>
+
+                    <!-- Logout Section -->
+                    <div class="settings-card"
+                        style="background: var(--bg-surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <h3 style="margin-bottom: 1rem; color: var(--danger-color);">Session Management</h3>
+                        <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem;">
+                            Securely end your current session. You will be redirected to the login screen.
+                        </p>
+                        <button onclick="logout()"
+                            style="background: #FEF2F2; color: var(--danger-color); border: 1px solid #FECACA; padding: 0.75rem 2rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; width: 100%;">
+                            Log Out
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="modal-overlay hidden">
         <!-- Add Product Modal -->
         <div id="modal-add-product" class="modal hidden">
             <h2>Add Product</h2>
