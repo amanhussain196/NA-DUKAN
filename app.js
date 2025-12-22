@@ -320,14 +320,23 @@ function renderInventoryList() {
 
         const item = document.createElement('div');
         item.className = 'inventory-item';
+
+        let imageHtml = '';
+        if (p.image_data) {
+            imageHtml = `<img src="${p.image_data}" style="width:40px; height:40px; object-fit:cover; border-radius:4px; margin-right:10px;">`;
+        }
+
         item.innerHTML = `
-            <div class="item-info">
-                <h4>${p.name}</h4>
-                <div class="item-meta">₹${p.price} • Stock: ${stockDisplay} • ${tabName}</div>
+            <div class="item-info" style="display:flex; align-items:center;">
+                ${imageHtml}
+                <div>
+                    <h4>${p.name}</h4>
+                    <div class="item-meta">₹${p.price} • Stock: ${stockDisplay} • ${tabName}</div>
+                </div>
             </div>
             <div class="item-actions">
-                <button onclick="openEditProduct('${p.id}')">Edit</button>
-                <button onclick="deleteProduct('${p.id}')" style="color:var(--danger-color); border-color:var(--danger-color)">Delete</button>
+                <button class="btn-edit" onclick="openEditProduct('${p.id}')">Edit</button>
+                <button class="btn-delete" onclick="deleteProduct('${p.id}')">Delete</button>
             </div>
         `;
         container.appendChild(item);
@@ -352,6 +361,74 @@ function closeModals() {
     document.getElementById('add-product-form').reset();
     document.getElementById('add-tab-form').reset();
     document.getElementById('edit-product-form').reset();
+
+    // Destroy croppers
+    if (cropper) { cropper.destroy(); cropper = null; }
+    document.getElementById('p-cropper-container').classList.add('hidden');
+    document.getElementById('edit-p-cropper-container').classList.add('hidden');
+    document.getElementById('p-image-input').value = '';
+    document.getElementById('edit-p-image-input').value = '';
+}
+
+// Image Handling Logic
+let cropper;
+
+function handleImageInput(inputId, previewId, containerId) {
+    const input = document.getElementById(inputId);
+    const image = document.getElementById(previewId);
+    const container = document.getElementById(containerId);
+
+    input.addEventListener('change', (e) => {
+        const files = e.target.files;
+        if (files && files.length > 0) {
+            const file = files[0];
+            if (file.size > 2 * 1024 * 1024) {
+                alert('File too large. Max 2MB.');
+                input.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                image.src = e.target.result;
+                container.classList.remove('hidden');
+                if (cropper) cropper.destroy();
+                cropper = new Cropper(image, {
+                    aspectRatio: 1, // Square for card
+                    viewMode: 1,
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+}
+
+// Initialize handlers
+handleImageInput('p-image-input', 'p-image-preview', 'p-cropper-container');
+handleImageInput('edit-p-image-input', 'edit-p-image-preview', 'edit-p-cropper-container');
+
+async function getCompressedImage() {
+    if (!cropper) return null;
+
+    // Get cropped canvas
+    let canvas = cropper.getCroppedCanvas({
+        width: 300, // Reasonable max width
+        height: 300
+    });
+
+    if (!canvas) return null;
+
+    // Compress
+    let quality = 0.9;
+    let dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+    // Reduce quality until < 20KB
+    while (dataUrl.length > 20000 && quality > 0.1) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+    }
+
+    return dataUrl;
 }
 
 function openAddTabModal() {
@@ -362,7 +439,7 @@ function openAddTabModal() {
 function openAddProductModal() {
     // Populate tab select
     const select = document.getElementById('p-tab');
-    select.innerHTML = '<option value="">Select Tab</option>';
+    select.innerHTML = '<option value="">All (Uncategorized)</option>';
     appState.tabs.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
@@ -414,7 +491,7 @@ function openEditProduct(productId) {
 
     // Populate tab select
     const select = document.getElementById('edit-p-tab');
-    select.innerHTML = '';
+    select.innerHTML = '<option value="">All (Uncategorized)</option>';
     appState.tabs.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
@@ -422,6 +499,11 @@ function openEditProduct(productId) {
         if (t.id === product.tab_id) opt.selected = true;
         select.appendChild(opt);
     });
+
+    // Handle existing image preview if needed? 
+    // For now, we only show cropper if NEW image selected.
+    // Maybe show current image?
+    // Not critical for MVP, user can just upload new one to replace.
 
     modalOverlay.classList.remove('hidden');
     document.getElementById('modal-edit-product').classList.remove('hidden');
@@ -449,15 +531,25 @@ document.getElementById('add-product-form').addEventListener('submit', async (e)
     const name = document.getElementById('p-name').value;
     const price = document.getElementById('p-price').value;
     const is_in_house = document.getElementById('p-house').checked;
-    // If in-house, we ignore stock input (it's hidden/empty) and save as 0
     const stock = is_in_house ? 0 : (document.getElementById('p-stock').value || 0);
 
     let tab_id = document.getElementById('p-tab').value;
-    if (tab_id === "") tab_id = null; // Handle unselected tab
+    if (tab_id === "") tab_id = null;
+
+    // Process Image
+    const image_data = await getCompressedImage();
 
     const { error } = await supabase
         .from('products')
-        .insert([{ name, price, stock, tab_id, is_in_house, tenant_id: authState.owner.tenant_id }]);
+        .insert([{
+            name,
+            price,
+            stock,
+            tab_id,
+            is_in_house,
+            tenant_id: authState.owner.tenant_id,
+            image_data: image_data
+        }]);
 
     if (error) alert('Error creating product');
     else {
@@ -473,15 +565,22 @@ document.getElementById('edit-product-form').addEventListener('submit', async (e
     const name = document.getElementById('edit-p-name').value;
     const price = document.getElementById('edit-p-price').value;
     const is_in_house = document.getElementById('edit-p-house').checked;
-
     const stock = is_in_house ? 0 : (document.getElementById('edit-p-stock').value || 0);
 
     let tab_id = document.getElementById('edit-p-tab').value;
     if (tab_id === "") tab_id = null;
 
+    const updates = { name, price, stock, tab_id, is_in_house };
+
+    // Only update image if changed
+    const image_data = await getCompressedImage();
+    if (image_data) {
+        updates.image_data = image_data;
+    }
+
     const { error } = await supabase
         .from('products')
-        .update({ name, price, stock, tab_id, is_in_house })
+        .update(updates)
         .eq('id', id)
         .eq('tenant_id', authState.owner.tenant_id);
 
@@ -524,18 +623,54 @@ function renderBilling() {
     const grid = document.getElementById('billing-grid');
     grid.innerHTML = '';
 
-    const filtered = appState.currentBillingTab === 'all'
+    let filtered = appState.currentBillingTab === 'all'
         ? appState.products
         : appState.products.filter(p => p.tab_id === appState.currentBillingTab);
+
+    // Search Filter
+    const searchInput = document.getElementById('billing-search');
+    if (searchInput) {
+        const term = searchInput.value.toLowerCase();
+        if (term) {
+            filtered = filtered.filter(p => p.name.toLowerCase().startsWith(term));
+        }
+    }
 
     filtered.forEach(p => {
         const card = document.createElement('div');
         card.className = 'product-card';
+
+        let imageHtml = '';
+        if (p.image_data) {
+            imageHtml = `
+            <div class="card-image">
+                <img src="${p.image_data}" alt="${p.name}">
+            </div>`;
+        } else {
+            imageHtml = `
+             <div class="card-image" style="background:#e5e7eb; color:#6b7280; font-weight:bold; font-size:1.5rem;">
+                ${p.name.charAt(0).toUpperCase()}
+             </div>`;
+        }
+
+        // Stock Display Logic
+        let stockInfo = '';
+        if (p.is_in_house) {
+            stockInfo = '<span style="font-size:0.75rem; color:var(--success-color); display:block; margin-bottom:0.25rem;">In-house made</span>';
+        } else {
+            let color = p.stock > 0 ? 'var(--text-secondary)' : 'var(--danger-color)';
+            stockInfo = `<span style="font-size:0.75rem; color:${color}; display:block; margin-bottom:0.25rem;">Stock: ${p.stock}</span>`;
+        }
+
         card.innerHTML = `
-            <h4>${p.name}</h4>
-            <div class="card-footer">
-                <span class="price">₹${p.price}</span>
-                <button class="add-btn" onclick="addToCart('${p.id}')">+</button>
+            ${imageHtml}
+            <div class="card-details">
+                <h4>${p.name}</h4>
+                ${stockInfo}
+                <div class="card-footer">
+                    <span class="price">₹${p.price}</span>
+                    <button class="add-btn" onclick="addToCart('${p.id}')">+</button>
+                </div>
             </div>
         `;
         grid.appendChild(card);

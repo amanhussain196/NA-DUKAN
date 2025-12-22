@@ -350,123 +350,6 @@ body {
     padding: 0.25rem 0.75rem;
     margin-left: 0.5rem;
     border-radius: 4px;
-    border: 1px solid var(--border-color);
-    background: white;
-    cursor: pointer;
-}
-
-/* Billing */
-.billing-layout {
-    display: flex;
-    gap: 1.5rem;
-    height: 100%;
-}
-
-.billing-products {
-    flex: 2;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.billing-header {
-    margin-bottom: 1rem;
-}
-
-.tabs-scroll {
-    display: flex;
-    gap: 0.5rem;
-    overflow-x: auto;
-    padding-bottom: 0.5rem;
-}
-
-.product-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 1rem;
-    overflow-y: auto;
-    padding-bottom: 1rem;
-}
-
-.product-card {
-    background: var(--bg-surface);
-    padding: 1rem;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    transition: transform 0.1s;
-}
-
-.product-card:active {
-    transform: scale(0.98);
-}
-
-.product-card h4 {
-    font-size: 0.95rem;
-    margin-bottom: 0.5rem;
-    line-height: 1.3;
-}
-
-.card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: auto;
-}
-
-.price {
-    font-weight: 600;
-    color: var(--primary-color);
-}
-
-.add-btn {
-    background: var(--primary-color);
-    color: white;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: none;
-    font-size: 1.2rem;
-    line-height: 1;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.billing-sidebar {
-    flex: 1;
-    background: var(--bg-surface);
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    padding: 1rem;
-    min-width: 300px;
-    max-width: 400px;
-}
-
-@media (max-width: 768px) {
-    .billing-layout {
-        flex-direction: column-reverse;
-        /* Cart on top or bottom? usually cart is bottom on mobile or separate. Let's do column for now */
-    }
-
-    .billing-sidebar {
-        max-width: 100%;
-        min-width: 100%;
-        margin-top: 1rem;
-    }
-
-    .tabs-scroll {
-        padding-bottom: 1rem;
-    }
-}
-
-.billing-sidebar h2 {
-    font-size: 1.1rem;
     margin-bottom: 1rem;
     padding-bottom: 1rem;
     border-bottom: 1px solid var(--border-color);
@@ -598,7 +481,10 @@ body {
     padding: 2rem;
     border-radius: 12px;
     width: 100%;
-    max-width: 400px;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     box-shadow: var(--shadow-md);
 }
 
@@ -897,6 +783,174 @@ body {
     color: var(--danger-color);
     font-size: 0.85rem;
     margin-top: 0.5rem;
+}
+
+/* Fixed Inventory Buttons */
+.item-actions button {
+    padding: 0.4rem 0.8rem !important;
+    margin-left: 0.5rem;
+    border-radius: 6px !important;
+    border: 1px solid var(--border-color) !important;
+    background: white;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+    margin-bottom: 0 !important;
+    padding-bottom: 0.4rem !important;
+}
+
+.item-actions .btn-edit:hover {
+    background: var(--bg-app);
+    border-color: var(--text-secondary) !important;
+}
+
+.item-actions .btn-delete {
+    color: var(--danger-color) !important;
+    border-color: #FECACA !important;
+    background: #FEF2F2 !important;
+}
+
+.item-actions .btn-delete:hover {
+    background: #FEE2E2 !important;
+    border-color: var(--danger-color) !important;
+}
+
+/* Billing */
+.billing-layout {
+    display: flex;
+    gap: 1.5rem;
+    height: 100%;
+}
+
+.billing-products {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.billing-header {
+    margin-bottom: 1rem;
+}
+
+.tabs-scroll {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+}
+
+.product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    overflow-y: auto;
+    padding-bottom: 1rem;
+}
+
+.product-card {
+    background: var(--bg-surface);
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    height: 100px;
+    transition: transform 0.1s;
+}
+
+.product-card:active {
+    transform: scale(0.98);
+}
+
+.card-image {
+    width: 40%;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.card-details {
+    width: 60%;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.product-card h4 {
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+    line-height: 1.2;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+}
+
+.price {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.add-btn {
+    background: var(--primary-color);
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.billing-sidebar {
+    flex: 1;
+    background: var(--bg-surface);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    min-width: 300px;
+    max-width: 400px;
+}
+
+@media (max-width: 768px) {
+    .billing-layout {
+        flex-direction: column-reverse;
+    }
+
+    .billing-sidebar {
+        max-width: 100%;
+        min-width: 100%;
+        margin-top: 1rem;
+    }
+
+    .tabs-scroll {
+        padding-bottom: 1rem;
+    }
 }
 
 /* Mobile Optimizations */

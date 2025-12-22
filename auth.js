@@ -44,12 +44,12 @@ async function checkSession() {
 }
 
 function showAuth() {
-    document.getElementById('auth-section').classList.remove('hidden');
+    document.getElementById('auth-wrapper').classList.remove('hidden');
     document.getElementById('main-app').classList.add('hidden');
 }
 
 async function showApp() {
-    document.getElementById('auth-section').classList.add('hidden');
+    document.getElementById('auth-wrapper').classList.add('hidden');
     document.getElementById('main-app').classList.remove('hidden');
 
     // Permission Check
@@ -144,11 +144,11 @@ async function handleLogin() {
 
             if (error) {
                 console.error("Phone lookup error:", error);
-                alert("Error searching for phone number: " + error.message);
+                alert("Error searching for phone number: " + error.message + "\n\n(RLS Policy might be blocking access)");
                 return;
             }
             if (!owner) {
-                alert("Phone number not found.");
+                alert("Phone number not found. Please register or use Email.");
                 return;
             }
             emailToLogin = owner.email;
@@ -177,7 +177,7 @@ async function handleLogin() {
 
         if (profileError || !ownerProfile) {
             console.error("Profile Fetch Error:", profileError);
-            alert("Login successful but failed to load profile data.");
+            alert("Login successful but failed to load profile data.\nError: " + profileError.message + "\n\n(Check 'owners' table RLS policies)");
             return;
         }
 
@@ -399,3 +399,16 @@ async function logout() {
     supabase.auth.signOut();
     location.reload();
 }
+
+// Add Enter key support for login
+document.addEventListener('DOMContentLoaded', () => {
+    const inputs = ['login-identifier', 'login-password'];
+    inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleLogin();
+            });
+        }
+    });
+});

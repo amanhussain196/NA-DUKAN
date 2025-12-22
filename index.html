@@ -5,24 +5,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Na Dukan</title>
+    <link rel="stylesheet" href="style.css">
 
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- Styles -->
-    <link rel="stylesheet" href="style.css">
+    <!-- Cropper.js -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 </head>
 
 <body>
-    <!-- Authentication Section -->
-    <div id="auth-section" class="auth-wrapper">
+    <div id="auth-wrapper" class="auth-wrapper">
         <div class="auth-card">
             <h1 style="text-align: center; margin-bottom: 1.5rem;">Na <span class="highlight">Dukan</span></h1>
 
@@ -178,9 +173,6 @@
                         <p class="stat-value" id="stat-bill-count">0</p>
                     </div>
                 </div>
-
-                <!-- Data Analysis Section -->
-                <!-- Data Analysis moved to separate tab -->
 
                 <div class="dashboard-section" style="margin-top: 2rem;">
                     <h2 style="font-size: 1.1rem; margin-bottom: 1rem;">Top Selling Products</h2>
@@ -341,6 +333,11 @@
             <div class="billing-layout">
                 <div class="billing-products">
                     <header class="billing-header">
+                        <div style="margin-bottom: 0.5rem;">
+                            <input type="text" id="billing-search" placeholder="Search products..."
+                                onkeyup="renderBilling()"
+                                style="width: 100%; padding: 0.6rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.95rem;">
+                        </div>
                         <div class="tabs-scroll" id="billing-tabs">
                             <!-- Helper tabs injected here -->
                             <button class="tab-pill active">All</button>
@@ -468,7 +465,6 @@
                                 </p>
                             </div>
                         </div>
-                        <!-- Placeholder Content -->
                         <div class="form-group">
                             <label>Owner Name</label>
                             <input type="text" value="Loading..." id="settings-p-name" disabled
@@ -597,15 +593,15 @@
     <div id="modal-overlay" class="modal-overlay hidden">
         <!-- Add Product Modal -->
         <div id="modal-add-product" class="modal hidden">
-            <h2>Add Product</h2>
+            <h2>Add New Product</h2>
             <form id="add-product-form">
                 <div class="form-group">
-                    <label>Name</label>
+                    <label>Product Name</label>
                     <input type="text" id="p-name" required>
                 </div>
                 <div class="form-group">
                     <label>Price (₹)</label>
-                    <input type="number" id="p-price" required min="0">
+                    <input type="number" id="p-price" required min="0" step="0.01">
                 </div>
                 <div class="form-group">
                     <label>Stock</label>
@@ -613,7 +609,15 @@
                 </div>
                 <div class="form-group">
                     <label>Category (Tab)</label>
-                    <select id="p-tab" required></select>
+                    <select id="p-tab"></select>
+                </div>
+                <!-- Image Upload -->
+                <div class="form-group">
+                    <label>Product Image</label>
+                    <input type="file" id="p-image-input" accept="image/*">
+                    <div id="p-cropper-container" class="hidden" style="margin-top: 1rem; max-height: 300px;">
+                        <img id="p-image-preview" style="max-width: 100%;">
+                    </div>
                 </div>
                 <div class="form-group checkbox">
                     <label><input type="checkbox" id="p-house"> In-house made?</label>
@@ -621,6 +625,45 @@
                 <div class="modal-actions">
                     <button type="button" class="cancel-btn" onclick="closeModals()">Cancel</button>
                     <button type="submit" class="save-btn">Save Product</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Edit Product Modal -->
+        <div id="modal-edit-product" class="modal hidden">
+            <h2>Edit Product</h2>
+            <form id="edit-product-form">
+                <input type="hidden" id="edit-p-id">
+                <div class="form-group">
+                    <label>Product Name</label>
+                    <input type="text" id="edit-p-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Price (₹)</label>
+                    <input type="number" id="edit-p-price" required min="0" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Stock</label>
+                    <input type="number" id="edit-p-stock" required min="0">
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="edit-p-tab"></select>
+                </div>
+                <!-- Image Upload -->
+                <div class="form-group">
+                    <label>Product Image</label>
+                    <input type="file" id="edit-p-image-input" accept="image/*">
+                    <div id="edit-p-cropper-container" class="hidden" style="margin-top: 1rem; max-height: 300px;">
+                        <img id="edit-p-image-preview" style="max-width: 100%;">
+                    </div>
+                </div>
+                <div class="form-group checkbox">
+                    <label><input type="checkbox" id="edit-p-house"> In-house made?</label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" onclick="closeModals()">Cancel</button>
+                    <button type="submit" class="save-btn">Update Product</button>
                 </div>
             </form>
         </div>
@@ -635,38 +678,7 @@
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="cancel-btn" onclick="closeModals()">Cancel</button>
-                    <button type="submit" class="save-btn">Create Tab</button>
-                </div>
-            </form>
-        </div>
-
-        <!-- Edit Product Modal (Full version) -->
-        <div id="modal-edit-product" class="modal hidden">
-            <h2>Edit Product</h2>
-            <input type="hidden" id="edit-p-id">
-            <form id="edit-product-form">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" id="edit-p-name" required>
-                </div>
-                <div class="form-group">
-                    <label>Price (₹)</label>
-                    <input type="number" id="edit-p-price" required min="0">
-                </div>
-                <div class="form-group">
-                    <label>Stock</label>
-                    <input type="number" id="edit-p-stock" required min="0">
-                </div>
-                <div class="form-group">
-                    <label>Category</label>
-                    <select id="edit-p-tab" required></select>
-                </div>
-                <div class="form-group checkbox">
-                    <label><input type="checkbox" id="edit-p-house"> In-house made?</label>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="cancel-btn" onclick="closeModals()">Cancel</button>
-                    <button type="submit" class="save-btn">Update Product</button>
+                    <button type="submit" class="save-btn">Add Tab</button>
                 </div>
             </form>
         </div>
