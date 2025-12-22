@@ -127,6 +127,7 @@
                 <button class="nav-btn" onclick="switchView('billing')">Billing</button>
                 <button class="nav-btn" onclick="switchView('sales')">Sales</button>
                 <button class="nav-btn" onclick="switchView('inventory')">Inventory</button>
+                <button class="nav-btn" onclick="switchView('employees')">Employees</button>
                 <button class="nav-btn" onclick="switchView('settings')">Settings</button>
             </div>
         </nav>
@@ -300,6 +301,41 @@
             </div>
         </section>
 
+        <!-- Employees View -->
+        <section id="employees" class="view hidden">
+            <header class="view-header">
+                <h1>Employee Logs</h1>
+                <div class="sales-controls">
+                    <div class="control-group">
+                        <select id="employee-log-select" onchange="loadEmployeeLogs()">
+                            <option value="all">All Employees</option>
+                            <!-- Employees injected here -->
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <input type="date" id="employee-log-date" onchange="loadEmployeeLogs()">
+                    </div>
+                </div>
+            </header>
+
+            <div class="sales-table-container">
+                <table class="sales-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Employee Name</th>
+                            <th>Login Time</th>
+                            <th>Logout Time</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody id="employee-logs-list">
+                        <!-- Logs injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Billing View -->
         <section id="billing" class="view hidden">
             <div class="billing-layout">
@@ -397,6 +433,8 @@
                             <th>Date & Time</th>
                             <th>Payment Mode</th>
                             <th>Items</th>
+                            <th>Discount</th>
+                            <th>Billed By</th>
                             <th>Total Amount</th>
                         </tr>
                     </thead>

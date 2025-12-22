@@ -56,15 +56,17 @@ async function showApp() {
     if (authState.owner) {
         // Nav Buttons
         const navButtons = document.querySelectorAll('.nav-btn');
-        let invBtn = null, analysisBtn = null;
+        let invBtn = null, analysisBtn = null, empBtn = null;
         navButtons.forEach(btn => {
             if (btn.textContent.includes('Inventory')) invBtn = btn;
             if (btn.textContent.includes('Data Analysis')) analysisBtn = btn;
+            if (btn.textContent.includes('Employees')) empBtn = btn;
         });
 
         if (authState.owner.role === 'employee') {
-            // Hide Inventory
+            // Hide Inventory & Employees
             if (invBtn) invBtn.style.display = 'none';
+            if (empBtn) empBtn.style.display = 'none';
 
             // Check Analysis Permission (Fetch Owner Config)
             const { data: ownerReq } = await supabase
@@ -89,6 +91,7 @@ async function showApp() {
             // Owner: Show All
             if (invBtn) invBtn.style.display = 'inline-block';
             if (analysisBtn) analysisBtn.style.display = 'inline-block';
+            if (empBtn) empBtn.style.display = 'inline-block';
         }
     }
 
@@ -180,6 +183,25 @@ async function handleLogin() {
 
         localStorage.setItem('tenant_session', JSON.stringify(ownerProfile));
         authState.owner = ownerProfile;
+
+        // Employee Logging
+        if (ownerProfile.role === 'employee') {
+            const { data: logData, error: logError } = await supabase
+                .from('employee_logs')
+                .insert([{
+                    employee_id: ownerProfile.id,
+                    tenant_id: ownerProfile.tenant_id
+                }])
+                .select()
+                .single();
+
+            if (logError) {
+                console.error("Failed to log employee session:", logError);
+            } else if (logData) {
+                localStorage.setItem('employee_log_id', logData.id);
+            }
+        }
+
         showApp();
     } catch (err) {
         console.error("Unexpected Logic Error:", err);
@@ -355,7 +377,24 @@ function generateTenantId() {
 }
 
 // Logout Helper
-function logout() {
+async function logout() {
+    const session = localStorage.getItem('tenant_session');
+    if (session) {
+        try {
+            const user = JSON.parse(session);
+            const logId = localStorage.getItem('employee_log_id');
+            if (user.role === 'employee' && logId) {
+                await supabase
+                    .from('employee_logs')
+                    .update({ logout_time: new Date().toISOString() })
+                    .eq('id', logId);
+                localStorage.removeItem('employee_log_id');
+            }
+        } catch (e) {
+            console.error("Logout log error:", e);
+        }
+    }
+
     localStorage.removeItem('tenant_session');
     supabase.auth.signOut();
     location.reload();

@@ -42,7 +42,24 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Load Initial Data
     // Duplicate calls removed
+
+    // Inactivity Timer
+    document.addEventListener('mousemove', resetInactivityTimer);
+    document.addEventListener('keydown', resetInactivityTimer);
+    document.addEventListener('click', resetInactivityTimer);
+    resetInactivityTimer();
 });
+
+let inactivityTimer;
+function resetInactivityTimer() {
+    if (window.authState && window.authState.owner && window.authState.owner.role === 'employee') {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+            alert("Session expired due to inactivity (5 mins).");
+            logout();
+        }, 5 * 60 * 1000);
+    }
+}
 
 // Navigation
 function switchView(viewId) {
@@ -63,7 +80,12 @@ function switchView(viewId) {
     if (viewId === 'dashboard') loadDashboard(appState.dashboardFilter);
     if (viewId === 'analysis') loadDashboard(appState.dashboardFilter);
     if (viewId === 'sales') loadSales();
+    if (viewId === 'sales') loadSales();
     if (viewId === 'settings') loadSettings();
+    if (viewId === 'employees') {
+        loadEmployeesForDropdown();
+        loadEmployeeLogs();
+    }
 }
 
 // ==========================================
@@ -80,7 +102,10 @@ async function loadSales() {
     const dateTo = document.getElementById('sales-date-to').value;
     const searchBill = document.getElementById('sales-search-bill').value;
 
-    let query = supabase.from('bills').select('*').eq('tenant_id', authState.owner.tenant_id);
+    let query = supabase
+        .from('bills')
+        .select('*, owners:created_by(full_name)')
+        .eq('tenant_id', authState.owner.tenant_id);
 
     // Apply Filters
     if (payMode !== 'all') {
@@ -121,7 +146,7 @@ function renderSales(bills) {
     tbody.innerHTML = '';
 
     if (bills.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">No sales found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">No sales found</td></tr>';
         return;
     }
 
@@ -130,11 +155,23 @@ function renderSales(bills) {
         const date = new Date(bill.created_at);
         const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+        // Calculate Flat Discount
+        let discountDisplay = '₹0.00';
+        if (bill.subtotal && bill.final_amount) {
+            const diff = bill.subtotal - bill.final_amount;
+            if (diff > 0) discountDisplay = `₹${diff.toFixed(2)}`;
+        }
+
+        // Billed By
+        const billedBy = bill.owners ? bill.owners.full_name : 'Unknown';
+
         tr.innerHTML = `
             <td>#${bill.bill_number || 'N/A'}</td>
             <td>${dateStr}</td>
             <td>${bill.payment_mode}</td>
             <td><button onclick="viewBillDetails('${bill.id}')" class="action-btn small">View Items</button></td>
+            <td>${discountDisplay}</td>
+            <td>${billedBy}</td>
             <td style="font-weight:600">₹${bill.final_amount.toFixed(2)}</td>
         `;
         tbody.appendChild(tr);
@@ -621,7 +658,8 @@ async function generateBill() {
             discount_value: discountValue,
             final_amount: final,
             payment_mode: paymentMode,
-            tenant_id: authState.owner.tenant_id
+            tenant_id: authState.owner.tenant_id,
+            created_by: authState.owner.id
         }])
         .select()
         .single();
@@ -2058,6 +2096,94 @@ if (!window.hasEmployeeListener) {
                 closeModals();
                 loadSettings(); // Refresh list
             }
+        });
+    }
+}
+
+// ==========================================
+// EMPLOYEE LOGS
+// ==========================================
+
+async function loadEmployeeLogs() {
+    if (!supabase) return;
+
+    const empId = document.getElementById('employee-log-select').value;
+    const date = document.getElementById('employee-log-date').value;
+
+    let query = supabase
+        .from('employee_logs')
+        .select(`
+            *,
+            owners:employee_id (full_name)
+        `)
+        .eq('tenant_id', authState.owner.tenant_id)
+        .order('login_time', { ascending: false });
+
+    if (empId !== 'all') {
+        query = query.eq('employee_id', empId);
+    }
+    if (date) {
+        const start = new Date(date).toISOString();
+        const end = new Date(new Date(date).setHours(23, 59, 59)).toISOString();
+        query = query.gte('login_time', start).lte('login_time', end);
+    }
+
+    const { data: logs, error } = await query;
+    if (error) {
+        console.error("Error loading logs:", error);
+        return;
+    }
+
+    const tbody = document.getElementById('employee-logs-list');
+    tbody.innerHTML = '';
+
+    if (!logs || logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">No logs found</td></tr>';
+        return;
+    }
+
+    logs.forEach(log => {
+        const tr = document.createElement('tr');
+        const login = new Date(log.login_time);
+        const logout = log.logout_time ? new Date(log.logout_time) : null;
+
+        let duration = 'Active';
+        if (logout) {
+            const diffMs = logout - login;
+            const diffMins = Math.floor(diffMs / 60000);
+            const hrs = Math.floor(diffMins / 60);
+            const mins = diffMins % 60;
+            duration = `${hrs}h ${mins}m`;
+        }
+
+        tr.innerHTML = `
+            <td>${login.toLocaleDateString()}</td>
+            <td>${log.owners?.full_name || 'Unknown'}</td>
+            <td>${login.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+            <td>${logout ? logout.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+            <td>${duration}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function loadEmployeesForDropdown() {
+    const { data: employees } = await supabase
+        .from('owners')
+        .select('id, full_name')
+        .eq('tenant_id', authState.owner.tenant_id)
+        .eq('role', 'employee');
+
+    const select = document.getElementById('employee-log-select');
+    // Keep first option
+    select.innerHTML = '<option value="all">All Employees</option>';
+
+    if (employees) {
+        employees.forEach(emp => {
+            const opt = document.createElement('option');
+            opt.value = emp.id;
+            opt.textContent = emp.full_name;
+            select.appendChild(opt);
         });
     }
 }
