@@ -1124,9 +1124,9 @@ body {
 
 
     .mobile-brand span {
-        font-size: 0.7rem;
-        color: var(--text-secondary);
-        font-weight: 500;
+        font-size: inherit;
+        color: inherit;
+        font-weight: inherit;
     }
 
     .hamburger-btn {
@@ -1203,9 +1203,10 @@ body {
         font-size: 1.25rem;
         font-weight: 800;
         margin: 0;
+        color: #F8FAFC;
     }
 
-    .drawer-brand span {
+    .drawer-brand>span {
         font-size: 0.75rem;
         color: var(--text-secondary);
     }
@@ -1667,15 +1668,78 @@ body {
         width: 100%;
         /* Mobile full width */
         max-width: 100%;
+        height: 100% !important;
+        max-height: none !important;
+        /* Override restricted height */
         background: #0F172A;
         z-index: 1000;
         transform: translateX(100%);
         transition: transform 0.3s ease-in-out;
-        padding: 1rem;
+        padding: 0.75rem;
+        /* Reduced padding */
         display: flex !important;
         /* Force flex since hidden-desktop might conflict if not careful, but sidebar is shown. */
         flex-direction: column;
         border-left: none;
+        overflow-y: auto !important;
+        /* Allow main container to scroll */
+    }
+
+    /* Sticky Header in Mobile Sidebar */
+    .billing-sidebar.mobile-slide-panel .mobile-panel-header {
+        position: sticky;
+        top: -0.75rem;
+        /* Negative top to account for padding if needed, or 0. Actually padding is on container. */
+        /* If padding is on container, sticky is relative to content box. Top: 0 is fine. */
+        /* BUT padding 0.75rem on container acts as gap. Sticky element sits inside padding? No. */
+        /* Sticky element is child. Padding is on sidebar. */
+        /* So top: 0 means 0px from padding edge. Correct. */
+        /* However, to make it look flush, we might want to move padding to children or negative margin. */
+        /* Let's use negative margin to counteract container padding for header full width look if desired, */
+        /* but simpler is just top: -0.75rem to stick to very top. */
+        top: -0.75rem;
+        z-index: 50;
+        background: #0F172A;
+        /* Match bg */
+        margin: -0.75rem -0.75rem 0.5rem -0.75rem;
+        padding: 0.75rem;
+    }
+
+    /* Allow items list to be natural height */
+    .billing-sidebar.mobile-slide-panel .cart-items {
+        flex: none !important;
+        overflow: visible !important;
+    }
+
+    /* Compact Mobile Cart Items */
+    .billing-sidebar.mobile-slide-panel .cart-item {
+        padding: 0.5rem;
+        min-height: auto;
+    }
+
+    .billing-sidebar.mobile-slide-panel .cart-item-name {
+        font-size: 0.85rem;
+    }
+
+    .billing-sidebar.mobile-slide-panel .qty-btn {
+        width: 22px;
+        height: 22px;
+    }
+
+    /* Compact Summary */
+    .billing-sidebar.mobile-slide-panel .billing-summary {
+        margin-top: 0.5rem;
+        padding-top: 0.5rem;
+        gap: 0.5rem;
+    }
+
+    .billing-sidebar.mobile-slide-panel .payment-mode {
+        margin: 0.25rem 0;
+    }
+
+    .billing-sidebar.mobile-slide-panel .checkout-btn {
+        padding: 0.75rem;
+        margin-top: 0.25rem;
     }
 
     .billing-sidebar.mobile-slide-panel.open {
@@ -2209,9 +2273,22 @@ body {
 #toast-notification.hidden {
     display: none !important;
 }
-
 @media (min-width: 1025px) {
     #toast-notification {
         bottom: 2rem;
     }
+}
+
+@media (max-width: 1024px) {
+    /* --- Mobile Auth Dark Theme --- */
+    .auth-wrapper { background-color: #0F172A !important; }
+    .auth-card { background-color: #1E293B !important; border-color: #334155 !important; }
+    .auth-title, .auth-card h1 { color: #F8FAFC !important; }
+    .form-group label { color: #F1F5F9 !important; }
+    .form-group input { background-color: #334155 !important; border-color: #475569 !important; color: #F8FAFC !important; }
+    .form-group input::placeholder { color: #94A3B8 !important; }
+    .auth-footer { color: #E2E8F0 !important; }
+    .highlight { color: #3B82F6 !important; }
+    .dev-otp-section { background: #334155 !important; color: #E2E8F0 !important; border: 1px solid #475569 !important; }
+    .dev-otp-section label { color: #CBD5E1 !important; }
 }

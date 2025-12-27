@@ -1047,7 +1047,18 @@ async function generateBill() {
     // Success
     alert(`Bill Generated Successfully! Total: ₹${final.toFixed(2)}`);
     appState.cart = [];
+
+    // Reset Discount Inputs
+    document.getElementById('discount-type').value = 'none';
+    document.getElementById('discount-value').value = '';
+
     renderCart();
+
+    // Close Mobile Sidebar
+    const sidebar = document.getElementById('billing-summary-panel');
+    if (sidebar && sidebar.classList.contains('open')) {
+        sidebar.classList.remove('open');
+    }
 
     // Refresh Inventory and Dashboard
     await loadInventory(); // to get new stock
@@ -2213,7 +2224,8 @@ async function loadSettings() {
 
 window.updateBranding = function () {
     const brandEl = document.getElementById('nav-brand-name');
-    if (!brandEl) return;
+    const mobileBrandEl = document.getElementById('mobile-brand-name');
+    const drawerBrandEl = document.getElementById('drawer-brand-name');
 
     let name = "Na Dukan"; // Default fallback
 
@@ -2232,13 +2244,21 @@ window.updateBranding = function () {
         name = appState.ownerPreferredName;
     }
 
-    // If still just "Na Dukan", apply basic styling. 
-    // If custom, just text.
-    if (name === "Na Dukan") {
-        brandEl.innerHTML = `Na <span class="highlight">Dukan</span>`;
-    } else {
-        brandEl.textContent = name;
-    }
+    // Helper to update text or HTML
+    const updateElement = (el) => {
+        if (!el) return;
+        // If still just "Na Dukan", apply basic styling. 
+        // If custom, just text.
+        if (name === "Na Dukan") {
+            el.innerHTML = `Na <span class="highlight">Dukan</span>`;
+        } else {
+            el.textContent = name;
+        }
+    };
+
+    updateElement(brandEl);
+    updateElement(mobileBrandEl);
+    updateElement(drawerBrandEl);
 }
 
 // ==========================================
