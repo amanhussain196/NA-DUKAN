@@ -2087,26 +2087,29 @@ async function loadSettings() {
         // Hide Inventory for Employee
         if (invBtn) invBtn.style.display = 'none';
 
-        // Fetch Owner Details AND Preferences
-        const { data: ownerReq } = await supabase
-            .from('owners')
-            .select('*')
-            .eq('tenant_id', user.tenant_id)
-            .eq('role', 'owner')
-            .maybeSingle();
+        if (user.tenant_id) {
+            // Fetch Owner Details AND Preferences
+            const { data: ownerReq } = await supabase
+                .from('owners')
+                .select('*')
+                .eq('tenant_id', user.tenant_id)
+                .eq('role', 'owner')
+                .maybeSingle();
 
-        if (ownerReq) {
-            pNameVal = ownerReq.full_name + " (Owner)";
-            pEmailVal = ownerReq.email;
-            if (ownerReq.allow_employee_analysis) allowAnalysis = true;
+            if (ownerReq) {
+                pNameVal = ownerReq.full_name + " (Owner)";
+                pEmailVal = ownerReq.email;
+                if (ownerReq.allow_employee_analysis) allowAnalysis = true;
 
-            // Cache owner's store name for branding
-            if (ownerReq.preferred_store_name) {
-                appState.ownerPreferredName = ownerReq.preferred_store_name;
-            } else {
-                appState.ownerPreferredName = ownerReq.business_name || "Na Dukan";
+                // Cache owner's store name for branding
+                if (ownerReq.preferred_store_name) {
+                    appState.ownerPreferredName = ownerReq.preferred_store_name;
+                } else {
+                    appState.ownerPreferredName = ownerReq.business_name || "Na Dukan";
+                }
             }
         }
+
         updateBranding(); // Update UI immediately
 
         // Hide Analysis if not allowed
