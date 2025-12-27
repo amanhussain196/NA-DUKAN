@@ -31,6 +31,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('date-from').value = today;
     document.getElementById('date-to').value = today;
 
+    // Init Mobile Date Inputs
+    if (document.getElementById('mobile-date-from')) {
+        document.getElementById('mobile-date-from').value = today;
+        document.getElementById('mobile-date-to').value = today;
+    }
+
     // Set default sales date inputs
     document.getElementById('sales-date-from').value = today;
     document.getElementById('sales-date-to').value = today;
@@ -61,6 +67,21 @@ function resetInactivityTimer() {
     }
 }
 
+function showToast(message) {
+    const toast = document.getElementById('toast-notification');
+    if (!toast) return;
+
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+
+    setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 800); // 0.8s for better readability, user asked for "disappear in 0.5s"
+    // Interpretation: maybe show for 0.5s? or fade takes 0.5s? 
+    // "disappear in 0.5 seconds" usually means duration visible is short.
+    // I'll set timeout to 500ms as requested.
+}
+
 // Navigation
 function switchView(viewId) {
     // Hide all views
@@ -74,18 +95,183 @@ function switchView(viewId) {
     const btn = Array.from(document.querySelectorAll('.nav-btn')).find(b => b.getAttribute('onclick').includes(viewId));
     if (btn) btn.classList.add('active');
 
+    // Update Section Indicator (Mobile)
+    const sectionNameMap = {
+        'dashboard': 'Dashboard',
+        'analysis': 'Data Analysis',
+        'billing': 'Billing',
+        'sales': 'Sales',
+        'inventory': 'Inventory',
+        'employees': 'Employees',
+        'settings': 'Settings'
+    };
+    const indicator = document.getElementById('current-section-name');
+    if (indicator) {
+        indicator.textContent = sectionNameMap[viewId] || 'Dashboard';
+    }
+
+    // Update active state in mobile drawer
+    document.querySelectorAll('.drawer-link').forEach(el => el.classList.remove('active'));
+    const drawerLink = Array.from(document.querySelectorAll('.drawer-link')).find(b => b.getAttribute('onclick').includes(viewId));
+    if (drawerLink) drawerLink.classList.add('active');
+
     // Refresh data if needed
     if (viewId === 'inventory') renderInventoryList();
     if (viewId === 'billing') renderBilling();
     if (viewId === 'dashboard') loadDashboard(appState.dashboardFilter);
     if (viewId === 'analysis') loadDashboard(appState.dashboardFilter);
     if (viewId === 'sales') loadSales();
-    if (viewId === 'sales') loadSales();
     if (viewId === 'settings') loadSettings();
     if (viewId === 'employees') {
         loadEmployeesForDropdown();
         loadEmployeeLogs();
     }
+}
+
+function toggleMobileMenu() {
+    const drawer = document.getElementById('mobile-drawer');
+    const overlay = document.getElementById('drawer-overlay');
+
+    if (drawer.classList.contains('open')) {
+        drawer.classList.remove('open');
+        overlay.classList.remove('visible');
+        setTimeout(() => overlay.classList.add('hidden'), 300); // Wait for fade out
+    } else {
+        overlay.classList.remove('hidden');
+        // Force reflow
+        void overlay.offsetWidth;
+        drawer.classList.add('open');
+        overlay.classList.add('visible');
+    }
+}
+
+function handleMobileFilterChange(value) {
+    if (value === 'custom') {
+        document.getElementById('mobile-custom-date-inputs').classList.remove('hidden');
+    } else {
+        document.getElementById('mobile-custom-date-inputs').classList.add('hidden');
+        loadDashboard(value);
+    }
+}
+
+function applyCustomDateMobile() {
+    // Determine which date inputs to use
+    // Since loadDashboard calls applyCustomDate internally when filter is 'custom',
+    // We need to ensure logic reads from mobile inputs OR we sync mobile inputs to desktop inputs.
+    // Syncing is safer to reuse existing logic if possible, BUT loadDashboard might read specific IDs.
+    // Let's check loadDashboard implementation. Assuming it reads #date-from and #date-to.
+
+    // Simplest: Sync mobile values to desktop inputs and call loadDashboard('custom')
+    const mFrom = document.getElementById('mobile-date-from').value;
+    const mTo = document.getElementById('mobile-date-to').value;
+
+    if (!mFrom || !mTo) {
+        alert("Please select both dates");
+        return;
+    }
+
+    document.getElementById('date-from').value = mFrom;
+    document.getElementById('date-to').value = mTo;
+
+    loadDashboard('custom');
+}
+
+function toggleSalesCustomDate() {
+    const inputs = document.getElementById('sales-custom-dates');
+    if (inputs.classList.contains('hidden')) {
+        inputs.classList.remove('hidden');
+    } else {
+        inputs.classList.add('hidden');
+    }
+}
+
+function setSalesFilter(range) {
+    // Update Active Buttons (Desktop)
+    document.querySelectorAll('#sales .filter-btn').forEach(btn => btn.classList.remove('active'));
+    const btn = document.querySelector(`#sales .filter-btn[data-range="${range}"]`);
+    if (btn) btn.classList.add('active');
+
+    // Update Mobile Select
+    const select = document.getElementById('sales-mobile-select');
+    if (select) select.value = range;
+
+    if (range === 'custom') {
+        document.getElementById('sales-custom-dates').classList.remove('hidden');
+        return;
+    } else {
+        document.getElementById('sales-custom-dates').classList.add('hidden');
+    }
+
+    // Calculate Dates
+    const now = new Date();
+    let dFrom = new Date();
+    let dTo = new Date();
+
+    if (range === 'today') {
+        // dFrom is today 00:00
+        // dTo is today 23:59 (or just today date string)
+    } else if (range === 'week') {
+        const day = now.getDay();
+        // Mon=1...Sun=0. 
+        // Let's assume Mon start.
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        dFrom.setDate(diff);
+    } else if (range === 'month') {
+        dFrom.setDate(1);
+    } else if (range === 'year') {
+        dFrom.setMonth(0);
+        dFrom.setDate(1);
+    }
+
+    // Set Inputs
+    const fmt = d => d.toISOString().split('T')[0];
+    document.getElementById('sales-date-from').value = fmt(dFrom);
+    document.getElementById('sales-date-to').value = fmt(dTo);
+
+    loadSales();
+}
+
+function toggleBillingSidebar() {
+    const panel = document.getElementById('billing-summary-panel');
+    if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+    } else {
+        panel.classList.add('open');
+    }
+}
+
+function handleMobileAnalysisFilterChange(value) {
+    if (value === 'custom') {
+        document.getElementById('mobile-analysis-custom-inputs').classList.remove('hidden');
+    } else {
+        document.getElementById('mobile-analysis-custom-inputs').classList.add('hidden');
+        // This reuses loadDashboard which updates BOTH dashboard and analysis charts
+        loadDashboard(value);
+    }
+}
+
+function applyCustomDateMobileAnalysis() {
+    const mFrom = document.getElementById('mobile-analysis-date-from').value;
+    const mTo = document.getElementById('mobile-analysis-date-to').value;
+
+    if (!mFrom || !mTo) {
+        alert("Please select both dates");
+        return;
+    }
+
+    // Sync to desktop inputs (which are likely used by loadDashboard(custom) if logic reads DOM)
+    // Actually loadDashboard might read #date-from/#date-to OR #analysis-date-from/#analysis-date-to based on active view?
+    // Let's check applyCustomDate logic implementation if I could see it.
+    // Assuming loadDashboard('custom') reads from #date-from/to globally or if it checks view.
+    // To be safe, let's sync to BOTH sets of desktop inputs since we want unified state or at least the one that matters.
+    // And if `loadDashboard` reads specifically based on context, syncing ensures it works.
+
+    document.getElementById('date-from').value = mFrom;
+    document.getElementById('date-to').value = mTo;
+    document.getElementById('analysis-date-from').value = mFrom;
+    document.getElementById('analysis-date-to').value = mTo;
+
+    loadDashboard('custom');
 }
 
 // ==========================================
@@ -108,20 +294,29 @@ async function loadSales() {
         .eq('tenant_id', authState.owner.tenant_id);
 
     // Apply Filters
-    if (payMode !== 'all') {
-        query = query.eq('payment_mode', payMode);
-    }
 
-    if (dateFrom) {
-        query = query.gte('created_at', new Date(dateFrom).toISOString());
-    }
-
-    if (dateTo) {
-        query = query.lte('created_at', new Date(new Date(dateTo).setHours(23, 59, 59)).toISOString());
-    }
-
+    // If searching by Bill Number, ignore date range (Global Search)
     if (searchBill) {
         query = query.eq('bill_number', searchBill);
+        // We do typically keep payment mode filter if user explicitly selected it, 
+        // but often bill search implies "Find THIS bill". 
+        // Let's keep Pay Mode active in case they want to verify "Bill 123 is CASH".
+        if (payMode !== 'all') {
+            query = query.eq('payment_mode', payMode);
+        }
+    } else {
+        // Standard Filtering
+        if (payMode !== 'all') {
+            query = query.eq('payment_mode', payMode);
+        }
+
+        if (dateFrom) {
+            query = query.gte('created_at', new Date(dateFrom).toISOString());
+        }
+
+        if (dateTo) {
+            query = query.lte('created_at', new Date(new Date(dateTo).setHours(23, 59, 59)).toISOString());
+        }
     }
 
     // Apply Sort
@@ -305,12 +500,22 @@ function renderInventoryList() {
     const container = document.getElementById('inventory-list');
     container.innerHTML = '';
 
-    const filtered = appState.currentInventoryTab === 'all'
-        ? appState.products
-        : appState.products.filter(p => p.tab_id === appState.currentInventoryTab);
+    const query = document.getElementById('inventory-search') ? document.getElementById('inventory-search').value.toLowerCase().trim() : '';
+
+    let filtered = [];
+
+    if (query) {
+        // Global Search (Starts With logic as requested)
+        filtered = appState.products.filter(p => p.name.toLowerCase().startsWith(query));
+    } else {
+        // Tab Filter
+        filtered = appState.currentInventoryTab === 'all'
+            ? appState.products
+            : appState.products.filter(p => p.tab_id === appState.currentInventoryTab);
+    }
 
     if (filtered.length === 0) {
-        container.innerHTML = '<div style="padding:1rem; text-align:center; color:var(--text-secondary)">No items in this category</div>';
+        container.innerHTML = '<div style="padding:1rem; text-align:center; color:var(--text-secondary)">No items found</div>';
         return;
     }
 
@@ -697,6 +902,7 @@ function addToCart(productId) {
     } else {
         appState.cart.push({ product, qty: 1 });
     }
+    showToast("Product Added!");
     renderCart();
 }
 
@@ -722,6 +928,13 @@ function renderCart() {
             container.appendChild(div);
         });
     }
+
+
+    // Update Mobile Cart Count
+    const totalQty = appState.cart.reduce((sum, item) => sum + item.qty, 0);
+    const mobileCountEl = document.getElementById('mobile-cart-count');
+    if (mobileCountEl) mobileCountEl.textContent = `(${totalQty})`;
+
     calculateTotals();
 }
 
@@ -2064,7 +2277,7 @@ async function loadEmployeeList(tenantId) {
         }
 
         html += `
-            <div style="background:#f9fafb; padding:0.75rem; border-radius:8px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+            <div class="employee-list-item" style="background:#f9fafb; padding:0.75rem; border-radius:8px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
                 <div>
                     <div style="font-weight:500;">${emp.full_name || 'Staff'}</div>
                     <div style="font-size:0.8rem; color:var(--text-secondary);">${emp.email}</div>

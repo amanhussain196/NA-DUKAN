@@ -110,7 +110,54 @@
 
     <div id="main-app" class="app-container hidden">
         <!-- Navigation -->
-        <nav class="navbar">
+        <!-- Mobile Header -->
+        <header class="mobile-header hidden-desktop">
+            <button class="hamburger-btn" onclick="toggleMobileMenu()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 12h18M3 6h18M3 18h18" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </button>
+            <div class="mobile-brand">
+                <h1>Boss Hospital</h1>
+            </div>
+            <!-- Empty div for balance -->
+            <div style="width: 24px;"></div>
+            <span class="mobile-subtitle">by Na Dukan</span>
+        </header>
+
+        <!-- Section Indicator (Mobile) -->
+        <div class="section-indicator hidden-desktop">
+            <span id="current-section-name">Dashboard</span>
+        </div>
+
+        <!-- Mobile Navigation Drawer -->
+        <div id="mobile-drawer" class="mobile-drawer">
+            <div class="drawer-header">
+                <div class="drawer-brand">
+                    <h2>Boss Hospital</h2>
+                    <span>by Na Dukan</span>
+                </div>
+                <button class="close-drawer-btn" onclick="toggleMobileMenu()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </div>
+            <nav class="drawer-nav">
+                <button class="drawer-link active"
+                    onclick="switchView('dashboard'); toggleMobileMenu()">Dashboard</button>
+                <button class="drawer-link" onclick="switchView('analysis'); toggleMobileMenu()">Data Analysis</button>
+                <button class="drawer-link" onclick="switchView('billing'); toggleMobileMenu()">Billing</button>
+                <button class="drawer-link" onclick="switchView('sales'); toggleMobileMenu()">Sales</button>
+                <button class="drawer-link" onclick="switchView('inventory'); toggleMobileMenu()">Inventory</button>
+                <button class="drawer-link" onclick="switchView('employees'); toggleMobileMenu()">Employees</button>
+                <button class="drawer-link" onclick="switchView('settings'); toggleMobileMenu()">Settings</button>
+            </nav>
+        </div>
+        <div id="drawer-overlay" class="drawer-overlay hidden" onclick="toggleMobileMenu()"></div>
+
+        <!-- Desktop Navigation -->
+        <nav class="navbar hidden-mobile">
             <div class="logo" style="display:flex; flex-direction:column; line-height:1.2; justify-content:center;">
                 <span id="nav-brand-name" style="font-size:1.5rem; font-weight:800;">Na <span
                         class="highlight">Dukan</span></span>
@@ -136,7 +183,7 @@
         <section id="dashboard" class="view active">
             <header class="view-header">
                 <h1>Dashboard</h1>
-                <div class="filters">
+                <div class="filters hidden-mobile">
                     <button class="filter-btn active" data-range="today">Today</button>
                     <button class="filter-btn" data-range="week">This Week</button>
                     <button class="filter-btn" data-range="month">This Month</button>
@@ -146,6 +193,31 @@
                         <input type="date" id="date-from">
                         <input type="date" id="date-to">
                         <button class="action-btn small" onclick="applyCustomDate()">Go</button>
+                    </div>
+                </div>
+
+                <!-- Mobile Filter Dropdown -->
+                <div class="mobile-dashboard-filter hidden-desktop">
+                    <label for="mobile-period-select" class="mobile-input-label">Select Period</label>
+                    <div class="mobile-select-wrapper">
+                        <select id="mobile-period-select" onchange="handleMobileFilterChange(this.value)">
+                            <option value="today" selected>Today</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                            <option value="year">This Year</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                        <div class="select-arrow">▼</div>
+                    </div>
+
+                    <!-- Mobile Custom Date (Reused IDs will conflict if not careful, but desktop is hidden so safe to reuse logic if we target correctly, 
+                         BUT ids must be unique. I will use different IDs and update JS to handle both via class or separated logic.
+                         Actually, standard practice is unique IDs. Let's use new IDs for mobile custom inputs. -->
+                    <div id="mobile-custom-date-inputs" class="hidden"
+                        style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <input type="date" id="mobile-date-from" class="mobile-date-input">
+                        <input type="date" id="mobile-date-to" class="mobile-date-input">
+                        <button class="action-btn small" onclick="applyCustomDateMobile()">Go</button>
                     </div>
                 </div>
             </header>
@@ -187,7 +259,7 @@
         <section id="analysis" class="view hidden">
             <header class="view-header">
                 <h1>Data Analysis</h1>
-                <div class="filters">
+                <div class="filters hidden-mobile">
                     <button class="filter-btn active" data-range="today">Today</button>
                     <button class="filter-btn" data-range="week">This Week</button>
                     <button class="filter-btn" data-range="month">This Month</button>
@@ -197,6 +269,28 @@
                         <input type="date" id="analysis-date-from">
                         <input type="date" id="analysis-date-to">
                         <button class="action-btn small" onclick="applyCustomDate('analysis')">Go</button>
+                    </div>
+                </div>
+
+                <!-- Mobile Analysis Filter Dropdown -->
+                <div class="mobile-dashboard-filter hidden-desktop">
+                    <label for="mobile-analysis-select" class="mobile-input-label">Select Period</label>
+                    <div class="mobile-select-wrapper">
+                        <select id="mobile-analysis-select" onchange="handleMobileAnalysisFilterChange(this.value)">
+                            <option value="today" selected>Today</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                            <option value="year">This Year</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                        <div class="select-arrow">▼</div>
+                    </div>
+
+                    <div id="mobile-analysis-custom-inputs" class="hidden"
+                        style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <input type="date" id="mobile-analysis-date-from" class="mobile-date-input">
+                        <input type="date" id="mobile-analysis-date-to" class="mobile-date-input">
+                        <button class="action-btn small" onclick="applyCustomDateMobileAnalysis()">Go</button>
                     </div>
                 </div>
             </header>
@@ -284,6 +378,13 @@
                 </div>
             </header>
 
+            <!-- Inventory Search -->
+            <div style="margin-bottom: 1rem;">
+                <input type="text" id="inventory-search" placeholder="Search products..."
+                    oninput="renderInventoryList()"
+                    style="width: 100%; padding: 0.8rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 1rem; background: var(--bg-surface); color: var(--text-primary);">
+            </div>
+
             <div class="tabs-container" id="inventory-tabs">
                 <!-- Product tabs injected here -->
             </div>
@@ -346,10 +447,20 @@
                     <div class="product-grid" id="billing-grid">
                         <!-- Product cards injected here -->
                     </div>
+
+                    <!-- Mobile Go To Bill Button (Hidden on Desktop) -->
+                    <div class="mobile-bill-action-bar hidden-desktop">
+                        <button class="action-btn primary full-width" onclick="toggleBillingSidebar()">Go to Bill <span
+                                id="mobile-cart-count">(0)</span></button>
+                    </div>
                 </div>
 
-                <div class="billing-sidebar">
-                    <h2>Current Bill</h2>
+                <div id="billing-summary-panel" class="billing-sidebar mobile-slide-panel">
+                    <div class="mobile-panel-header hidden-desktop">
+                        <h2>Current Bill</h2>
+                        <button class="close-panel-btn" onclick="toggleBillingSidebar()">×</button>
+                    </div>
+                    <h2 class="hidden-mobile">Current Bill</h2>
                     <div class="cart-items" id="cart-items">
                         <!-- Cart items injected here -->
                         <div class="empty-cart">Cart is empty</div>
@@ -413,11 +524,47 @@
                         </select>
                     </div>
 
-                    <div class="control-group">
-                        <input type="date" id="sales-date-from" onchange="loadSales()">
-                        <span class="separator">to</span>
-                        <input type="date" id="sales-date-to" onchange="loadSales()">
-                        <input type="number" id="sales-search-bill" placeholder="Bill #" oninput="loadSales()">
+                    <div class="control-group expanded-filters">
+                        <!-- Desktop Filters -->
+                        <div class="filters hidden-mobile" style="margin-right: 1rem;">
+                            <button class="filter-btn active" data-range="today"
+                                onclick="setSalesFilter('today')">Today</button>
+                            <button class="filter-btn" data-range="week" onclick="setSalesFilter('week')">This
+                                Week</button>
+                            <button class="filter-btn" data-range="month" onclick="setSalesFilter('month')">This
+                                Month</button>
+                            <button class="filter-btn" data-range="year" onclick="setSalesFilter('year')">This
+                                Year</button>
+                            <button class="filter-btn" id="sales-custom-btn"
+                                onclick="toggleSalesCustomDate()">Custom</button>
+                        </div>
+
+                        <!-- Mobile Filters -->
+                        <div class="mobile-dashboard-filter hidden-desktop" style="width: 100%; margin-bottom: 0.5rem;">
+                            <label for="sales-mobile-select" class="mobile-input-label">Select Period</label>
+                            <div class="mobile-select-wrapper">
+                                <select id="sales-mobile-select" onchange="setSalesFilter(this.value)">
+                                    <option value="today" selected>Today</option>
+                                    <option value="week">This Week</option>
+                                    <option value="month">This Month</option>
+                                    <option value="year">This Year</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                                <div class="select-arrow">▼</div>
+                            </div>
+                        </div>
+
+                        <!-- Date Inputs (Shared) -->
+                        <div id="sales-custom-dates" class="hidden"
+                            style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                            <input type="date" id="sales-date-from" placeholder="From">
+                            <span class="separator hidden-mobile">to</span>
+                            <input type="date" id="sales-date-to" placeholder="To">
+                            <button class="action-btn small" onclick="loadSales()">Go</button>
+                        </div>
+
+                        <input type="number" id="sales-search-bill" placeholder="Bill #" oninput="loadSales()"
+                            style="margin-left: auto;">
                     </div>
                 </div>
             </header>
@@ -519,14 +666,18 @@
                         </div>
 
                         <div class="form-group" style="margin-bottom: 1.5rem;">
-                            <label>Preferred Store Name</label>
+                            <label>Preferred Store Name <span class="hidden-desktop"
+                                    style="font-weight:400; font-size: 0.85em; color: #94A3B8;">- displayed at top of
+                                    screen and bill.</span></label>
                             <input type="text" id="pref-store-name" placeholder="Na Dukan"
                                 style="width: 100%; margin-bottom: 0.5rem;">
                             <div style="text-align: right;">
-                                <button id="btn-save-pref-name" class="action-btn"
+                                <button id="btn-save-pref-name" class="action-btn save-name-btn"
                                     style="width: auto; padding: 0.4rem 1rem; font-size: 0.9rem;">Save Name</button>
                             </div>
-                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.3rem;">Displayed at
+                            <p class="hidden-mobile"
+                                style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.3rem;">Displayed
+                                at
                                 the
                                 top of the app.</p>
                         </div>
@@ -536,7 +687,8 @@
                             <div>
                                 <label style="font-weight: 500; display: block; margin-bottom: 0.2rem;">Employee
                                     Analysis</label>
-                                <span style="font-size: 0.8rem; color: var(--text-secondary);">Allow staff to see Data
+                                <span class="hidden-mobile"
+                                    style="font-size: 0.8rem; color: var(--text-secondary);">Allow staff to see Data
                                     Analysis tab</span>
                             </div>
                             <div class="checkbox">
@@ -711,7 +863,12 @@
                 </div>
             </form>
         </div>
+
     </div>
+
+    <!-- Toast Notification (Global) -->
+    <div id="toast-notification" class="hidden">Product Added!</div>
+
 
     <script src="config.js"></script>
     <script src="auth.js"></script>
