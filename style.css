@@ -79,7 +79,9 @@ body {
 /* Views */
 .view {
     flex: 1;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
     padding: 1.5rem;
     display: flex;
     flex-direction: column;
@@ -978,6 +980,8 @@ body {
 
     .view {
         padding: 1rem;
+        padding-bottom: 80px;
+        /* Ensure bottom content is accessible */
     }
 
     /* Dashboard Header */
@@ -2273,6 +2277,7 @@ body {
 #toast-notification.hidden {
     display: none !important;
 }
+
 @media (min-width: 1025px) {
     #toast-notification {
         bottom: 2rem;
@@ -2280,15 +2285,51 @@ body {
 }
 
 @media (max-width: 1024px) {
+
     /* --- Mobile Auth Dark Theme --- */
-    .auth-wrapper { background-color: #0F172A !important; }
-    .auth-card { background-color: #1E293B !important; border-color: #334155 !important; }
-    .auth-title, .auth-card h1 { color: #F8FAFC !important; }
-    .form-group label { color: #F1F5F9 !important; }
-    .form-group input { background-color: #334155 !important; border-color: #475569 !important; color: #F8FAFC !important; }
-    .form-group input::placeholder { color: #94A3B8 !important; }
-    .auth-footer { color: #E2E8F0 !important; }
-    .highlight { color: #3B82F6 !important; }
-    .dev-otp-section { background: #334155 !important; color: #E2E8F0 !important; border: 1px solid #475569 !important; }
-    .dev-otp-section label { color: #CBD5E1 !important; }
+    .auth-wrapper {
+        background-color: #0F172A !important;
+    }
+
+    .auth-card {
+        background-color: #1E293B !important;
+        border-color: #334155 !important;
+    }
+
+    .auth-title,
+    .auth-card h1 {
+        color: #F8FAFC !important;
+    }
+
+    .form-group label {
+        color: #F1F5F9 !important;
+    }
+
+    .form-group input {
+        background-color: #334155 !important;
+        border-color: #475569 !important;
+        color: #F8FAFC !important;
+    }
+
+    .form-group input::placeholder {
+        color: #94A3B8 !important;
+    }
+
+    .auth-footer {
+        color: #E2E8F0 !important;
+    }
+
+    .highlight {
+        color: #3B82F6 !important;
+    }
+
+    .dev-otp-section {
+        background: #334155 !important;
+        color: #E2E8F0 !important;
+        border: 1px solid #475569 !important;
+    }
+
+    .dev-otp-section label {
+        color: #CBD5E1 !important;
+    }
 }

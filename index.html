@@ -144,14 +144,20 @@
                 </button>
             </div>
             <nav class="drawer-nav">
-                <button class="drawer-link active"
+                <button id="drawer-link-dashboard" class="drawer-link active"
                     onclick="switchView('dashboard'); toggleMobileMenu()">Dashboard</button>
-                <button class="drawer-link" onclick="switchView('analysis'); toggleMobileMenu()">Data Analysis</button>
-                <button class="drawer-link" onclick="switchView('billing'); toggleMobileMenu()">Billing</button>
-                <button class="drawer-link" onclick="switchView('sales'); toggleMobileMenu()">Sales</button>
-                <button class="drawer-link" onclick="switchView('inventory'); toggleMobileMenu()">Inventory</button>
-                <button class="drawer-link" onclick="switchView('employees'); toggleMobileMenu()">Employees</button>
-                <button class="drawer-link" onclick="switchView('settings'); toggleMobileMenu()">Settings</button>
+                <button id="drawer-link-analysis" class="drawer-link"
+                    onclick="switchView('analysis'); toggleMobileMenu()">Data Analysis</button>
+                <button id="drawer-link-billing" class="drawer-link"
+                    onclick="switchView('billing'); toggleMobileMenu()">Billing</button>
+                <button id="drawer-link-sales" class="drawer-link"
+                    onclick="switchView('sales'); toggleMobileMenu()">Sales</button>
+                <button id="drawer-link-inventory" class="drawer-link"
+                    onclick="switchView('inventory'); toggleMobileMenu()">Inventory</button>
+                <button id="drawer-link-employees" class="drawer-link"
+                    onclick="switchView('employees'); toggleMobileMenu()">Employees</button>
+                <button id="drawer-link-settings" class="drawer-link"
+                    onclick="switchView('settings'); toggleMobileMenu()">Settings</button>
             </nav>
         </div>
         <div id="drawer-overlay" class="drawer-overlay hidden" onclick="toggleMobileMenu()"></div>

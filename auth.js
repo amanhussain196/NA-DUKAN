@@ -63,10 +63,17 @@ async function showApp() {
             if (btn.textContent.includes('Employees')) empBtn = btn;
         });
 
+        // Drawer Buttons
+        const drawerAnalysis = document.getElementById('drawer-link-analysis');
+        const drawerEmployees = document.getElementById('drawer-link-employees');
+        const drawerInventory = document.getElementById('drawer-link-inventory');
+
         if (authState.owner.role === 'employee') {
-            // Hide Inventory & Employees
+            // Hide Inventory & Employees (Desktop & Mobile)
             if (invBtn) invBtn.style.display = 'none';
             if (empBtn) empBtn.style.display = 'none';
+            if (drawerInventory) drawerInventory.style.display = 'none';
+            if (drawerEmployees) drawerEmployees.style.display = 'none';
 
             // Check Analysis Permission (Fetch Owner Config)
             const { data: ownerReq } = await supabase
@@ -86,12 +93,18 @@ async function showApp() {
             }
 
             if (analysisBtn) analysisBtn.style.display = allowAnalysis ? 'inline-block' : 'none';
+            if (drawerAnalysis) drawerAnalysis.style.display = allowAnalysis ? 'block' : 'none';
 
         } else {
-            // Owner: Show All
+            // Owner: Show All (Desktop)
             if (invBtn) invBtn.style.display = 'inline-block';
             if (analysisBtn) analysisBtn.style.display = 'inline-block';
             if (empBtn) empBtn.style.display = 'inline-block';
+
+            // Owner: Show All (Mobile)
+            if (drawerInventory) drawerInventory.style.display = 'block';
+            if (drawerAnalysis) drawerAnalysis.style.display = 'block';
+            if (drawerEmployees) drawerEmployees.style.display = 'block';
         }
     }
 

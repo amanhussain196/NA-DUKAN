@@ -2086,6 +2086,11 @@ async function loadSettings() {
         if (btn.textContent.includes('Data Analysis')) analysisBtn = btn;
     });
 
+    // Drawer Buttons
+    const drawerAnalysis = document.getElementById('drawer-link-analysis');
+    const drawerEmployees = document.getElementById('drawer-link-employees');
+    const drawerInventory = document.getElementById('drawer-link-inventory');
+
     let allowAnalysis = false;
 
     // 2. Populate Fields & Resolve Permissions
@@ -2095,8 +2100,12 @@ async function loadSettings() {
     let pEmailVal = user.email;
 
     if (user.role === 'employee') {
-        // Hide Inventory for Employee
+        // Hide Inventory for Employee (Desktop & Mobile)
         if (invBtn) invBtn.style.display = 'none';
+        if (drawerInventory) drawerInventory.style.display = 'none';
+
+        // Hide Employees Section for Employee
+        if (drawerEmployees) drawerEmployees.style.display = 'none';
 
         if (user.tenant_id) {
             // Fetch Owner Details AND Preferences
@@ -2124,17 +2133,21 @@ async function loadSettings() {
         updateBranding(); // Update UI immediately
 
         // Hide Analysis if not allowed
-        if (analysisBtn) {
-            analysisBtn.style.display = allowAnalysis ? 'inline-block' : 'none';
-        }
+        if (analysisBtn) analysisBtn.style.display = allowAnalysis ? 'inline-block' : 'none';
+        if (drawerAnalysis) drawerAnalysis.style.display = allowAnalysis ? 'block' : 'none';
 
         // Hide Pref Card
         document.getElementById('settings-preferences-card').classList.add('hidden');
 
     } else {
-        // Owner
+        // Owner (Desktop)
         if (invBtn) invBtn.style.display = 'inline-block';
         if (analysisBtn) analysisBtn.style.display = 'inline-block';
+
+        // Owner (Mobile)
+        if (drawerInventory) drawerInventory.style.display = 'block';
+        if (drawerAnalysis) drawerAnalysis.style.display = 'block';
+        if (drawerEmployees) drawerEmployees.style.display = 'block';
 
         // Show Pref Card
         const prefCard = document.getElementById('settings-preferences-card');
