@@ -78,7 +78,7 @@ async function showApp() {
             // Check Analysis Permission (Fetch Owner Config)
             const { data: ownerReq } = await supabase
                 .from('owners')
-                .select('allow_employee_analysis, preferred_store_name, business_name')
+                .select('allow_employee_analysis, preferred_store_name, business_name, preferred_logo, preferred_address, business_address, bill_note')
                 .eq('tenant_id', authState.owner.tenant_id)
                 .eq('role', 'owner')
                 .maybeSingle();
@@ -89,6 +89,24 @@ async function showApp() {
                 // Cache Branding
                 if (window.appState) {
                     window.appState.ownerPreferredName = ownerReq.preferred_store_name || ownerReq.business_name || "Na Dukan";
+                    if (ownerReq.preferred_logo) {
+                        window.appState.ownerPreferredLogo = ownerReq.preferred_logo;
+                    }
+                    // Cache Address & Note
+                    window.appState.ownerPreferredAddress = ownerReq.preferred_address || ownerReq.business_address || "";
+                    window.appState.ownerBillNote = ownerReq.bill_note || "";
+
+                    // Persist Cache for Reloads
+                    const prefCache = {
+                        name: window.appState.ownerPreferredName,
+                        logo: window.appState.ownerPreferredLogo,
+                        address: window.appState.ownerPreferredAddress,
+                        note: window.appState.ownerBillNote
+                    };
+                    localStorage.setItem('owner_pref_cache', JSON.stringify(prefCache));
+
+                    // Force update UI immediately if function available
+                    if (window.updateBranding) window.updateBranding();
                 }
             }
 

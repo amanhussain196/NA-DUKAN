@@ -10,10 +10,28 @@ let appState = {
     charts: { payment: null, revenue: null, bills: null, velocity: null, billVelocity: null, product: null },
     dashboardData: null // Cache for bills, items, etc.
 };
+
+// Restore Preference Cache
+const prefCache = localStorage.getItem('owner_pref_cache');
+if (prefCache) {
+    try {
+        const p = JSON.parse(prefCache);
+        appState.ownerPreferredName = p.name;
+        appState.ownerPreferredLogo = p.logo;
+        appState.ownerPreferredAddress = p.address;
+        appState.ownerBillNote = p.note;
+    } catch (e) { console.error("Cache parse error", e); }
+}
+
 window.appState = appState;
 
 // Intialize
 window.addEventListener('DOMContentLoaded', async () => {
+    // Attempt rapid branding update from cache
+    if (typeof updateBranding === 'function') {
+        updateBranding();
+    }
+
     if (!supabase) {
         console.error("Supabase client missing");
         return;
@@ -636,6 +654,62 @@ async function getCompressedImage() {
     return dataUrl;
 }
 
+// 5KB Limit Logo Compressor
+function getCompressedLogo(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                // Extremely small dimensions to hit 5KB
+                // 5KB is tiny. A 100x100 B/W image or simple icon might fit.
+                // Let's try max 150px
+                const MAX_WIDTH = 150;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_WIDTH) {
+                        width *= MAX_WIDTH / height;
+                        height = MAX_WIDTH;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = "#FFFFFF"; // Ensure white background for transparency
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Aggressive compression
+                let quality = 0.5;
+                let dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+                // Binary search or loop to ensure < 5KB could be here, but let's try a simple heuristic check
+                // 5KB = 5120 bytes. Base64 is ~1.33x larger. So Base64 length should be < 6826 chars roughly
+
+                while (dataUrl.length > 7000 && quality > 0.1) {
+                    quality -= 0.1;
+                    dataUrl = canvas.toDataURL('image/jpeg', quality);
+                }
+
+                resolve(dataUrl);
+            };
+            img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+    });
+}
+
 function openAddTabModal() {
     modalOverlay.classList.remove('hidden');
     document.getElementById('modal-add-tab').classList.remove('hidden');
@@ -1044,8 +1118,217 @@ async function generateBill() {
         }
     }
 
-    // Success
-    alert(`Bill Generated Successfully! Total: ₹${final.toFixed(2)}`);
+    // Success - Show Preview
+    // Note: We do NOT clear cart here. We clear it when the user closes the preview (Sales Cycle Complete).
+
+    // Refresh Inventory and Dashboard (Background update)
+    await loadInventory();
+    loadDashboard(appState.dashboardFilter);
+
+    showBillPreview(billData, itemsToInsert);
+}
+
+function showBillPreview(bill, items) {
+    const modal = document.getElementById('modal-bill-preview');
+    const container = document.getElementById('receipt-preview-content');
+
+    // Get Store Info
+    let storeName = "Na Dukan";
+    let storeAddress = "";
+    let storeLogo = null;
+    let billNote = "";
+
+    if (authState.owner) {
+        storeName = authState.owner.preferred_store_name || authState.owner.business_name || "Na Dukan";
+        storeAddress = authState.owner.preferred_address || authState.owner.business_address || "";
+        storeLogo = authState.owner.preferred_logo;
+        billNote = authState.owner.bill_note || "";
+    }
+    // Check local cache
+    if (appState.ownerPreferredName) storeName = appState.ownerPreferredName;
+    if (appState.ownerPreferredLogo) storeLogo = appState.ownerPreferredLogo;
+    if (appState.ownerPreferredAddress) storeAddress = appState.ownerPreferredAddress;
+    if (appState.ownerBillNote) billNote = appState.ownerBillNote; // We will add this to cache next
+
+    const date = new Date(bill.created_at);
+    const dateStr = date.toLocaleDateString();
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const billDisplay = bill.bill_number || bill.id.slice(0, 8);
+
+    // Build Items HTML (Div based)
+    // Format: S.No | Item | Qty | Amt
+    let itemsHtml = '';
+    items.forEach((item, index) => {
+        const lineTotal = item.quantity * item.price;
+        itemsHtml += `
+          <div class="row">
+            <span class="sno">${index + 1}</span>
+            <span class="item">${item.product_name}</span>
+            <span class="qty">${item.quantity}</span>
+            <span class="amt">${lineTotal.toFixed(2)}</span>
+          </div>
+        `;
+    });
+
+    const subtotal = bill.subtotal;
+    const finalAmount = bill.final_amount;
+    const discount = subtotal - finalAmount;
+
+    let totalsHtml = '';
+    if (discount > 0) {
+        totalsHtml = `
+          <div class="row">
+            <span class="item bold" style="flex:1;">Subtotal</span>
+            <span class="amt">${subtotal.toFixed(2)}</span>
+          </div>
+          <div class="row">
+            <span class="item bold">Discount</span>
+            <span class="amt">-${discount.toFixed(2)}</span>
+          </div>
+          <div class="divider"></div>
+          <div class="row total">
+            <span class="item" style="flex:1;">TOTAL</span>
+            <span class="amt">${finalAmount.toFixed(2)}</span>
+          </div>
+        `;
+    } else {
+        totalsHtml = `
+          <div class="row total">
+            <span class="item" style="flex:1;">TOTAL</span>
+            <span class="amt">${finalAmount.toFixed(2)}</span>
+          </div>
+        `;
+    }
+
+    // HTML Structure matching user's "READY-TO-USE" template
+    // We inline the CSS to ensure it renders correctly even if external CSS is cached or overridden.
+    const html = `
+        <style>
+            .receipt {
+              width: 58mm;
+              font-family: monospace;
+              font-size: 12px;
+              line-height: 1.3;
+              background: white;
+              box-sizing: border-box; 
+              padding: 5mm 3mm; /* Top/Bottom 5mm, Left/Right 3mm */
+              color: #000;
+              margin: 0 auto;
+              border: 1px solid #ddd;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .divider { border-top: 1px dashed #000; margin: 4px 0; }
+            .row { display: flex; }
+            
+            /* Column Widths Update: S.No (3mm), Item (Flex), Qty (4mm), Amt (14mm) */
+            .sno { width: 3mm; flex-shrink: 0; text-align: left; }
+            .item { flex: 1; padding-left: 1mm; overflow-x: hidden; }
+            .qty { width: 7mm; text-align: center; flex-shrink: 0; }
+            .amt { width: 14mm; text-align: right; flex-shrink: 0; }
+            
+            .total { font-size: 14px; font-weight: bold; }
+            
+            @media print {
+                body { margin: 0; visibility: hidden; }
+                .receipt { 
+                    visibility: visible; 
+                    position: absolute; 
+                    left: 0; 
+                    top: 0; 
+                    width: 58mm; 
+                    box-sizing: border-box;
+                    padding: 0 3mm; /* 3mm margins for print */
+                    margin: 0; 
+                    border: none;
+                }
+                .receipt * { visibility: visible; }
+                .modal-actions { display: none !important; }
+                #modal-overlay, #modal-bill-preview { 
+                    visibility: visible; 
+                    position: static; 
+                    background: none; 
+                    width: auto; 
+                    height: auto; 
+                    padding:0; margin:0; 
+                    border: none !important;
+                    box-shadow: none !important;
+                    border-radius: 0 !important;
+                }
+                @page { size: auto; margin: 0; }
+            }
+        </style>
+        <div class="receipt">
+          <div style="display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 2px;">
+               ${storeLogo ? `<img src="${storeLogo}" style="height: 20px; width: auto; max-width: 50px; object-fit: contain;">` : ''}
+               <div class="bold" style="text-transform:uppercase; font-size:16px;">${storeName}</div>
+          </div>
+          ${storeAddress ? `<div class="center" style="font-size: 10px; margin-bottom: 5px;">${storeAddress}</div>` : ''}
+          <div class="divider"></div>
+
+          <div style="display: flex; justify-content: space-between; font-size: 11px;">
+            <span>B.No:${billDisplay}</span>
+            <span>${dateStr} ${timeStr}</span>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="row bold">
+            <span class="sno">#</span>
+            <span class="item">ITEM</span>
+            <span class="qty">Qty</span>
+            <span class="amt">AMT</span>
+          </div>
+
+          <div class="divider"></div>
+
+          ${itemsHtml}
+
+          <div class="divider"></div>
+
+          ${totalsHtml}
+
+          <div class="divider"></div>
+
+          <div>Mode: ${bill.payment_mode}</div>
+
+          <br>
+          ${billNote ? `<div class="center" style="white-space: pre-wrap; margin-bottom: 8px;">${billNote}</div>` : ''}
+          <div class="center">Thank You for Visiting!</div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+
+    // Show Modal
+    const overlay = document.getElementById('modal-overlay');
+    overlay.classList.remove('hidden');
+    modal.classList.remove('hidden');
+
+    // Force scroll to top for Mobile/Tab
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Close Mobile Billing Sidebar if open
+    const sidebar = document.getElementById('billing-summary-panel');
+    if (sidebar && sidebar.classList.contains('open')) {
+        sidebar.classList.remove('open');
+    }
+}
+
+function printBill() {
+    window.print();
+}
+
+function closeBillPreview() {
+    // Hide Modal
+    const overlay = document.getElementById('modal-overlay');
+    const modal = document.getElementById('modal-bill-preview');
+
+    overlay.classList.add('hidden');
+    modal.classList.add('hidden');
+
+    // Clear Cart and Reset UI
     appState.cart = [];
 
     // Reset Discount Inputs
@@ -1060,9 +1343,7 @@ async function generateBill() {
         sidebar.classList.remove('open');
     }
 
-    // Refresh Inventory and Dashboard
-    await loadInventory(); // to get new stock
-    loadDashboard(appState.dashboardFilter); // update stats
+    showToast("Sales Cycle Complete");
 }
 
 // ==========================================
@@ -2127,6 +2408,13 @@ async function loadSettings() {
                 } else {
                     appState.ownerPreferredName = ownerReq.business_name || "Na Dukan";
                 }
+
+                if (ownerReq.preferred_logo) {
+                    appState.ownerPreferredLogo = ownerReq.preferred_logo;
+                }
+
+                // Cache owner's address
+                appState.ownerPreferredAddress = ownerReq.preferred_address || ownerReq.business_address || "";
             }
         }
 
@@ -2153,33 +2441,109 @@ async function loadSettings() {
         const prefCard = document.getElementById('settings-preferences-card');
         prefCard.classList.remove('hidden');
 
-        // PREF: Store Name
+        // PREF: Store Name, Address, Logo
         const nameInput = document.getElementById('pref-store-name');
-        const saveNameBtn = document.getElementById('btn-save-pref-name');
+        const addressInput = document.getElementById('pref-store-address');
+        const billNoteInput = document.getElementById('pref-bill-note');
+        const logoInput = document.getElementById('pref-logo-input');
+        const logoPreview = document.getElementById('pref-logo-preview');
+        const logoContainer = document.getElementById('pref-logo-preview-container');
+        const logoSizeText = document.getElementById('pref-logo-size');
+        const saveAllBtn = document.getElementById('btn-save-pref-all');
 
         if (nameInput) {
+            // Load existing values
             nameInput.value = user.preferred_store_name || user.business_name || '';
 
-            saveNameBtn.onclick = async () => {
-                const newName = nameInput.value.trim();
-                if (!newName) return;
+            // Default preferred address to business address if not set
+            if (addressInput) {
+                addressInput.value = user.preferred_address || user.business_address || '';
+            }
 
-                const { error } = await supabase
-                    .from('owners')
-                    .update({ preferred_store_name: newName })
-                    .eq('id', user.id);
+            if (billNoteInput) {
+                billNoteInput.value = user.bill_note || '';
+            }
 
-                if (error) {
-                    console.error("Save Error", error);
-                    alert("Failed to save name.");
-                } else {
-                    alert("Store Name Updated!");
-                    // Update Local State
-                    authState.owner.preferred_store_name = newName;
-                    localStorage.setItem('tenant_session', JSON.stringify(authState.owner));
-                    updateBranding();
-                }
-            };
+            // Show existing logo if available
+            if (user.preferred_logo && logoContainer) {
+                logoContainer.classList.remove('hidden');
+                logoPreview.src = user.preferred_logo;
+                logoSizeText.textContent = "Existing Logo Loaded";
+            }
+
+            // Handle Logo Selection & Preview with Compression
+            if (logoInput) {
+                logoInput.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    // Compress to 5KB (approx)
+                    // We'll use a very small max dimension and low quality
+                    try {
+                        const compressedBase64 = await getCompressedLogo(file);
+                        logoContainer.classList.remove('hidden');
+                        logoPreview.src = compressedBase64;
+
+                        // Calculate approximate size in KB
+                        const sizeInBytes = Math.ceil((compressedBase64.length * 3) / 4) - 2; // base64 size math
+                        const sizeInKb = (sizeInBytes / 1024).toFixed(2);
+                        logoSizeText.textContent = `New size: ${sizeInKb} KB (Compressed)`;
+
+                        // Store temporarily on element for save
+                        logoInput.dataset.base64 = compressedBase64;
+                    } catch (err) {
+                        console.error("Logo compression failed", err);
+                        alert("Failed to process logo image.");
+                    }
+                };
+            }
+
+            // Save All Preferences
+            if (saveAllBtn) {
+                saveAllBtn.onclick = async () => {
+                    const newName = nameInput.value.trim();
+                    const newAddress = addressInput ? addressInput.value.trim() : '';
+                    const newNote = billNoteInput ? billNoteInput.value.trim() : '';
+                    let newLogo = user.preferred_logo; // Default to existing
+
+                    // Check if new logo selected
+                    if (logoInput && logoInput.dataset.base64) {
+                        newLogo = logoInput.dataset.base64;
+                    }
+
+                    if (!newName) {
+                        alert("Store Name is required.");
+                        return;
+                    }
+
+                    const updates = {
+                        preferred_store_name: newName,
+                        preferred_address: newAddress,
+                        preferred_logo: newLogo,
+                        bill_note: newNote
+                    };
+
+                    const { error } = await supabase
+                        .from('owners')
+                        .update(updates)
+                        .eq('id', user.id);
+
+                    if (error) {
+                        console.error("Save Error", error);
+                        alert("Failed to save preferences. check console.");
+                    } else {
+                        showToast("Preferences Updated Successfully!");
+                        // Update Local State
+                        authState.owner.preferred_store_name = newName;
+                        authState.owner.preferred_address = newAddress;
+                        authState.owner.preferred_logo = newLogo;
+                        authState.owner.bill_note = newNote;
+                        localStorage.setItem('tenant_session', JSON.stringify(authState.owner));
+
+                        updateBranding();
+                    }
+                };
+            }
         }
 
         // PREF: Analysis Checkbox
@@ -2235,12 +2599,17 @@ async function loadSettings() {
     loadEmployeeList(user.tenant_id);
 }
 
-window.updateBranding = function () {
+function updateBranding() {
     const brandEl = document.getElementById('nav-brand-name');
     const mobileBrandEl = document.getElementById('mobile-brand-name');
     const drawerBrandEl = document.getElementById('drawer-brand-name');
 
+    const navLogo = document.getElementById('nav-brand-logo');
+    const mobileLogo = document.getElementById('mobile-brand-logo');
+    const drawerLogo = document.getElementById('drawer-brand-logo');
+
     let name = "Na Dukan"; // Default fallback
+    let logo = null;
 
     // Check owner pref
     // If owner logged in
@@ -2250,11 +2619,17 @@ window.updateBranding = function () {
         } else if (authState.owner.business_name) {
             name = authState.owner.business_name;
         }
+        if (authState.owner.preferred_logo) {
+            logo = authState.owner.preferred_logo;
+        }
     }
 
     // If we have cached one (e.g. employee view)
     if (appState.ownerPreferredName) {
         name = appState.ownerPreferredName;
+    }
+    if (appState.ownerPreferredLogo) {
+        logo = appState.ownerPreferredLogo;
     }
 
     // Helper to update text or HTML
@@ -2272,7 +2647,22 @@ window.updateBranding = function () {
     updateElement(brandEl);
     updateElement(mobileBrandEl);
     updateElement(drawerBrandEl);
+
+    // Update Logo
+    const updateLogo = (imgEl) => {
+        if (!imgEl) return;
+        if (logo) {
+            imgEl.src = logo;
+            imgEl.classList.remove('hidden');
+        } else {
+            imgEl.classList.add('hidden');
+        }
+    };
+    updateLogo(navLogo);
+    updateLogo(mobileLogo);
+    updateLogo(drawerLogo);
 }
+window.updateBranding = updateBranding;
 
 // ==========================================
 // EMPLOYEE MANAGEMENT

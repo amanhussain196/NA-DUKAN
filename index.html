@@ -118,7 +118,10 @@
                 </svg>
             </button>
             <div class="mobile-brand">
-                <h1><span id="mobile-brand-name">Na Dukan</span></h1>
+                <h1 style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <img id="mobile-brand-logo" class="hidden" style="height: 1.2em; width: auto; object-fit: contain;">
+                    <span id="mobile-brand-name">Na Dukan</span>
+                </h1>
             </div>
             <!-- Empty div for balance -->
             <div style="width: 24px;"></div>
@@ -134,7 +137,11 @@
         <div id="mobile-drawer" class="mobile-drawer">
             <div class="drawer-header">
                 <div class="drawer-brand">
-                    <h2><span id="drawer-brand-name">Na Dukan</span></h2>
+                    <h2 style="display: flex; align-items: center; gap: 8px;">
+                        <img id="drawer-brand-logo" class="hidden"
+                            style="height: 1.2em; width: auto; object-fit: contain;">
+                        <span id="drawer-brand-name">Na Dukan</span>
+                    </h2>
                     <span>by Na Dukan</span>
                 </div>
                 <button class="close-drawer-btn" onclick="toggleMobileMenu()">
@@ -165,8 +172,11 @@
         <!-- Desktop Navigation -->
         <nav class="navbar hidden-mobile">
             <div class="logo" style="display:flex; flex-direction:column; line-height:1.2; justify-content:center;">
-                <span id="nav-brand-name" style="font-size:1.5rem; font-weight:800;">Na <span
-                        class="highlight">Dukan</span></span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <img id="nav-brand-logo" class="hidden" style="height: 2rem; width: auto; object-fit: contain;">
+                    <span id="nav-brand-name" style="font-size:1.5rem; font-weight:800;">Na <span
+                            class="highlight">Dukan</span></span>
+                </div>
                 <span style="font-size: 0.7rem; color: var(--text-secondary); font-weight: 500;">by Na Dukan</span>
             </div>
             <div class="nav-links">
@@ -303,6 +313,30 @@
 
             <div class="dashboard-scroll-container">
                 <div class="analysis-grid">
+                    <!-- Row 5: Product Sales Table (Moved to Top) -->
+                    <div class="chart-container full-width" style="height: auto;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <h3>Detailed Sales Report</h3>
+                            <input type="text" id="sales-table-search" placeholder="Search..."
+                                onkeyup="filterSalesTable()"
+                                style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 6px;">
+                        </div>
+                        <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                            <table class="data-table" id="sales-report-table">
+                                <thead>
+                                    <tr>
+                                        <th>Product Name</th>
+                                        <th>Sales Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Injected via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- Row 1: Revenue Velocity & Trend -->
                     <div class="chart-container">
                         <h3>Revenue Velocity</h3>
@@ -344,30 +378,6 @@
                         <h3>Payment Mode Distribution</h3>
                         <div class="chart-wrapper">
                             <canvas id="chart-payment"></canvas>
-                        </div>
-                    </div>
-
-                    <!-- Row 5: Product Sales Table -->
-                    <div class="chart-container full-width" style="height: auto;">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                            <h3>Detailed Sales Report</h3>
-                            <input type="text" id="sales-table-search" placeholder="Search..."
-                                onkeyup="filterSalesTable()"
-                                style="padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 6px;">
-                        </div>
-                        <div class="table-container" style="max-height: 400px; overflow-y: auto;">
-                            <table class="data-table" id="sales-report-table">
-                                <thead>
-                                    <tr>
-                                        <th>Product Name</th>
-                                        <th>Sales Count</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <!-- Injected via JS -->
-                                </tbody>
-                            </table>
                         </div>
                     </div>
                 </div>
@@ -664,10 +674,9 @@
                                 style="width: 50px; height: 50px; background: #F3E8FF; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #9333EA; font-size: 1.5rem;">
                                 ⚙️</div>
                             <div>
-                                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">Preferences</h3>
-                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">Control app
-                                    behavior
-                                </p>
+                                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">Bill Preferences</h3>
+                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">Customize your
+                                    bill details.</p>
                             </div>
                         </div>
 
@@ -677,31 +686,43 @@
                                     screen and bill.</span></label>
                             <input type="text" id="pref-store-name" placeholder="Na Dukan"
                                 style="width: 100%; margin-bottom: 0.5rem;">
-                            <div style="text-align: right;">
-                                <button id="btn-save-pref-name" class="action-btn save-name-btn"
-                                    style="width: auto; padding: 0.4rem 1rem; font-size: 0.9rem;">Save Name</button>
-                            </div>
-                            <p class="hidden-mobile"
-                                style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.3rem;">Displayed
-                                at
-                                the
-                                top of the app.</p>
                         </div>
 
-                        <div
-                            style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                            <div>
-                                <label style="font-weight: 500; display: block; margin-bottom: 0.2rem;">Employee
-                                    Analysis</label>
-                                <span class="hidden-mobile"
-                                    style="font-size: 0.8rem; color: var(--text-secondary);">Allow staff to see Data
-                                    Analysis tab</span>
-                            </div>
-                            <div class="checkbox">
-                                <input type="checkbox" id="pref-employee-analysis"
-                                    style="width: 1.2rem; height: 1.2rem;">
+                        <!-- Preferred Address -->
+                        <div class="form-group" style="margin-bottom: 1.5rem;">
+                            <label>Preferred Address</label>
+                            <input type="text" id="pref-store-address" placeholder="Store Address"
+                                style="width: 100%; margin-bottom: 0.5rem;">
+                        </div>
+
+                        <!-- Logo Upload -->
+                        <div class="form-group" style="margin-bottom: 1.5rem;">
+                            <label>Store Logo</label>
+                            <input type="file" id="pref-logo-input" accept="image/*"
+                                style="width: 100%; margin-bottom: 0.5rem;">
+                            <div id="pref-logo-preview-container" class="hidden"
+                                style="margin-top: 0.5rem; text-align: center;">
+                                <img id="pref-logo-preview"
+                                    style="max-height: 80px; border: 1px solid #ccc; padding: 2px;">
+                                <p id="pref-logo-size" style="font-size: 0.8rem; color: #666;"></p>
                             </div>
                         </div>
+
+                        <!-- Bill Note -->
+                        <div class="form-group" style="margin-bottom: 1.5rem;">
+                            <label>Bill Note</label>
+                            <textarea id="pref-bill-note" placeholder="e.g. Goods once sold will not be taken back."
+                                style="width: 100%; min-height: 80px; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; font-family: inherit; font-size: 0.95rem; resize: vertical;"></textarea>
+                            <span style="font-size: 0.8rem; color: var(--text-secondary);">This text will appear at the
+                                bottom of the bill.</span>
+                        </div>
+
+                        <div style="text-align: right;">
+                            <button id="btn-save-pref-all" class="action-btn primary" style="width: auto;">Save Bill
+                                Preferences</button>
+                        </div>
+
+
                     </div>
 
                     <!-- Employee Section -->
@@ -723,10 +744,25 @@
                             <div style="text-align: center; color: var(--text-secondary); padding: 1rem;">Loading...
                             </div>
                         </div>
-                        <div style="text-align: center; margin-top: 1rem;">
+                        <div style="text-align: center; margin-top: 1rem; margin-bottom: 1rem;">
                             <button id="btn-add-employee" class="action-btn primary" onclick="openAddEmployeeModal()">+
                                 Add
                                 Employee</button>
+                        </div>
+
+                        <div
+                            style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                            <div>
+                                <label style="font-weight: 500; display: block; margin-bottom: 0.2rem;">Employee
+                                    Analysis</label>
+                                <span class="hidden-mobile"
+                                    style="font-size: 0.8rem; color: var(--text-secondary);">Allow staff to see Data
+                                    Analysis tab</span>
+                            </div>
+                            <div class="checkbox">
+                                <input type="checkbox" id="pref-employee-analysis"
+                                    style="width: 1.2rem; height: 1.2rem;">
+                            </div>
                         </div>
                     </div>
 
@@ -785,6 +821,17 @@
                     <button type="submit" class="save-btn">Save Product</button>
                 </div>
             </form>
+        </div>
+
+        <!-- Receipt Preview Modal -->
+        <div id="modal-bill-preview" class="modal hidden" style="width: auto; max-width: 400px; padding: 1rem;">
+            <div id="receipt-preview-content" class="receipt-content">
+                <!-- Receipt Content Injected Here -->
+            </div>
+            <div class="modal-actions" style="flex-direction: column; gap: 0.5rem; margin-top: 1rem;">
+                <button class="action-btn primary full-width" onclick="printBill()">Print</button>
+                <button class="action-btn full-width" onclick="closeBillPreview()">Print Not Needed</button>
+            </div>
         </div>
 
         <!-- Edit Product Modal -->
